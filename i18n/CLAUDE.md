@@ -10,7 +10,7 @@
 - 수정 후 Figma에서 플러그인을 다시 실행해야 반영된다 (핫 리로드 없음).
 - **넘기기 전 문법 검사** (Figma 샌드박스가 없으므로 API 실행은 불가, 문법만):
   `node -c code.js`, 그리고 `ui.html`의 `<script>` 블록을 추출해 `node -c`.
-- 이 폴더는 **git 저장소**다. 커밋은 사용자가 요청할 때만.
+- 상위 폴더 저장소(CG-figma-plugins)의 일부다. 이 폴더에 따로 저장소를 만들지 않는다. 커밋은 사용자가 요청할 때만.
 - `xlsx.full.min.js`(gitignore)는 현재 **로드되지 않는** 보관용 서드파티 라이브러리다. CSV는 `ui.html`의
   `parseCSV`/`generateCSV`가 직접 처리한다. 수정하지 말 것.
 

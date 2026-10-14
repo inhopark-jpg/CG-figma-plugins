@@ -45,7 +45,7 @@
 | Change Marker | `npm run build` (`build.js`) | `src/*` + `../doc/design-system/*` → `ui.html` |
 | Dev Inspector | 없음 | `ui.html`, `code.js` 직접 편집. 테스트: `sh test/run.sh` |
 | Sync Icon Colors | `npm run build` (tsc) | `code.ts` → `code.js` |
-| i18n | 없음 | `ui.html`, `code.js` 직접 편집 (git 저장소) |
+| i18n | 없음 | `ui.html`, `code.js` 직접 편집 |
 | Arrow Connect | `npm run build` (esbuild), `npm run typecheck` | `src/code.ts` → `dist/code.js`, UI는 `src/ui.html` 그대로 로드 |
 | Config Manager | `npm run build` (`build.mjs`), `npm run typecheck` | `src/*` → `dist/*`. UI 미리보기: `node dev-harness/serve.mjs` → http://localhost:5178 |
 | Organize Comp Variants | `npm run build` (esbuild), `npm run typecheck`, `npm test` | `src/code.ts` + `src/layout.ts` → `dist/code.js`, UI는 `src/ui.html` 그대로 로드 |
@@ -63,3 +63,11 @@ scripts/sync-ds.mjs       디자인 시스템을 각 플러그인 UI에 주입 (
 <플러그인 폴더>/README.md   목적·기능 (사람용)
 <플러그인 폴더>/CLAUDE.md   작업 가이드 (Claude Code용)
 ```
+
+## git 저장소
+
+- 이 폴더 **전체가 하나의 저장소**다: [inhopark-jpg/CG-figma-plugins](https://github.com/inhopark-jpg/CG-figma-plugins) (`main`).
+  플러그인 폴더 안에 따로 저장소를 만들지 않는다 (i18n도 예전엔 별도 저장소였으나 2026-10-15 합침).
+- `node_modules/`, `dist/`, `.DS_Store`는 커밋하지 않는다 (루트 `.gitignore`). clone 후 빌드가 있는 플러그인은
+  `npm install` → `npm run build`를 해야 Figma에서 import할 수 있다.
+- 커밋·push는 사용자가 요청할 때만.
