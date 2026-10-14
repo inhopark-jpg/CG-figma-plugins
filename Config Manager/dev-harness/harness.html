@@ -1,0 +1,62 @@
+<!doctype html><html><body style="margin:0;background:#ddd">
+<iframe id="f" src="/dist/ui.html" style="width:520px;height:680px;border:0;background:#fff"></iframe>
+<script>
+const f = document.getElementById('f');
+const log = [];
+window.__log = log;
+const state = {
+  presets: [
+    { id: 'p1', name: 'preset-language', displayName: 'language', isPreset: true, tableId: null,
+      modes: [{ id: 'm1', name: 'en' }, { id: 'm2', name: 'ko' }, { id: 'm5', name: 'ja' }, { id: 'm6', name: 'zh-Hant' }, { id: 'm7', name: 'vi' }],
+      tokens: [
+        { id: 'v1', name: 'greeting', type: 'STRING', propRef: '#1:2', values: { m1: { kind: 'value', value: 'Hello' }, m2: { kind: 'value', value: '안녕하세요' } } },
+        { id: 'v2', name: 'show-banner', type: 'BOOLEAN', propRef: '#1:3', values: { m1: { kind: 'value', value: true }, m2: { kind: 'value', value: false } } },
+        { id: 'v4', name: 'Size', type: 'STRING', propRef: 'variant:Size', values: { m1: { kind: 'value', value: 'Large' }, m2: { kind: 'value', value: 'Huge' } } },
+        { id: 'v3', name: 'accent', type: 'COLOR', propRef: null, values: { m1: { kind: 'value', value: { r: 1, g: 0.2, b: 0.2, a: 1 } }, m2: { kind: 'alias', id: 'x', name: 'brand/red' } } },
+      ],
+      component: { id: 'c:1', name: 'Banner', pageId: 'pg1' }, issueCount: 4, componentMissing: false },
+    { id: 'p2', name: 'preset-typeface', displayName: 'typeface', isPreset: true, tableId: 't1', component: null, modes: [{ id: 'm3', name: 'latin' }, { id: 'm4', name: 'hangul' }], tokens: [] },
+    { id: 'p3', name: 'typeface-semantic', displayName: 'typeface-semantic', isPreset: false, tableId: null, modes: [{ id: 'm8', name: 'rikaride/korean' }, { id: 'm9', name: 'rikaride/english' }], tokens: [] },
+  ],
+  configs: [
+    { id: 'c1', name: 'config-server', displayName: 'server', tableId: null,
+      modes: [{ id: 'cm1', name: 'Server A' }, { id: 'cm2', name: 'Server B' }],
+      rows: [
+        { variableId: 'r1', name: 'preset-language', presetId: 'p1', validType: true, values: { cm1: 'en', cm2: 'ko' } },
+        { variableId: 'r2', name: 'preset-typeface', presetId: 'p2', validType: true, values: { cm1: 'latin', cm2: 'oops' } },
+        { variableId: 'r3', name: 'ghost', presetId: null, validType: true, values: { cm1: 'x', cm2: 'y' } },
+      ] },
+  ],
+};
+const detail = { presetId: 'p1', id: 'c:1', name: 'Banner', status: 'ok', onCurrentPage: true, props: [
+        { ref: 'variant:Size', name: 'Size', kind: 'VARIANT', options: ['Small', 'Large'], defaultValue: 'Small', tokenId: 'v4', binding: 'instances' },
+        { ref: 'variant:State', name: 'State', kind: 'VARIANT', options: ['Default', 'Hover'], defaultValue: 'Default', tokenId: null, binding: 'instances' },
+        { ref: '#1:2', name: 'Greeting text', kind: 'TEXT', defaultValue: 'Hi', tokenId: 'v1', binding: 'ok' },
+        { ref: '#1:3', name: 'show-banner', kind: 'BOOLEAN', defaultValue: true, tokenId: 'v2', binding: 'none' },
+        { ref: '#1:4', name: 'Show icon', kind: 'BOOLEAN', defaultValue: false, tokenId: null, binding: 'other', otherName: 'global/icon' },
+        { ref: '#1:5', name: 'Caption', kind: 'TEXT', defaultValue: 'Caption', tokenId: null, binding: 'none' },
+      ],
+  issues: [
+    { kind: 'renamed', tokenId: 'v1', tokenName: 'greeting', propName: 'Greeting text' },
+    { kind: 'unbound', tokenId: 'v2', tokenName: 'show-banner' },
+    { kind: 'invalid', tokenId: 'v4', tokenName: 'Size', value: 'Huge' },
+    { kind: 'orphan', tokenId: 'v3', tokenName: 'accent' },
+  ] };
+const report = { pageName: 'Components', checked: 3, bound: 12,
+  issues: [{ presetId: 'p1', presetName: 'preset-language', componentName: 'Banner', issues: detail.issues }],
+  missing: [{ presetId: 'p4', presetName: 'preset-old-card', componentName: 'Card' }],
+  unlinked: [{ presetId: 'p2', presetName: 'preset-typeface', componentName: '' }],
+  elsewhere: [{ presetId: 'p5', presetName: 'preset-chip', componentName: 'Chip', pageName: 'Atoms' }] };
+const applied = { target: 'page "Home"', configs: { c1: { modeId: 'cm1', partial: false } } };
+const post = (m) => f.contentWindow.postMessage({ pluginMessage: m }, '*');
+window.addEventListener('message', (e) => {
+  const m = e.data.pluginMessage; if (!m) return;
+  log.push(m);
+  if (m.type === 'ready') {
+    post({ type: 'state', state }); post({ type: 'applied', applied });
+    post({ type: 'selection', component: { id: 'c:9', name: 'Card', presetName: 'preset-Card', presetId: null, fromInstance: true } });
+  }
+  if (m.type === 'watchPreset') post({ type: 'componentDetail', presetId: m.id, detail: m.id === 'p1' ? detail : null });
+  post({ type: 'result', requestId: m.requestId, ok: true, data: m.type === 'cleanupPresets' ? report : { id: 'p1' } });
+});
+</script></body></html>

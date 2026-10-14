@@ -1,0 +1,17 @@
+{
+  "name": "organize-sections",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tidies a section tree: padding, alternating background colors, and page / component layouts",
+  "scripts": {
+    "build": "esbuild src/code.ts --bundle --target=es2017 --outfile=dist/code.js",
+    "watch": "npm run build -- --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test test/layout.test.mjs"
+  },
+  "devDependencies": {
+    "@figma/plugin-typings": "*",
+    "esbuild": "*",
+    "typescript": "*"
+  }
+}

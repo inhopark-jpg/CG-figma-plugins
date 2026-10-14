@@ -1,0 +1,1831 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+/* =========================================================================
+   Figma Plugins — Shared Design Tokens
+   Source of truth: doc/design-system/. Synced into each plugin by
+   `node scripts/sync-ds.mjs` (see doc/design-system/README.md).
+   =========================================================================
+   Foundation layer: colors, type, resets. Load this before components.css.
+
+   These are Figma plugin UI tokens: every color variable maps to a
+   `--figma-color-*` CSS variable that the Figma desktop app injects at
+   runtime (so the UI auto-matches the user's light/dark theme), with a
+   static fallback for contexts where that variable isn't defined (e.g.
+   previewing this file outside a Figma plugin iframe).
+
+   If you're building a plain web app (not a Figma plugin), just drop the
+   var(--figma-color-*, ...) wrapper and keep the fallback hex as the value.
+   ========================================================================= */
+
+:root {
+  /* ---- color: surfaces ---- */
+  --bg:        var(--figma-color-bg, #fff);              /* page / panel background */
+  --bg-2:      var(--figma-color-bg-secondary, #f5f5f5);  /* recessed surface: headers, code blocks, field backgrounds */
+  --bg-hover:  var(--figma-color-bg-hover, #f0f0f0);      /* hover state for rows, buttons, tabs */
+  --bg-sel:    var(--figma-color-bg-selected, #e5f0ff);   /* selected / active row background */
+
+  /* ---- color: borders & text ---- */
+  --border:    var(--figma-color-border, #e6e6e6);
+  --text:      var(--figma-color-text, #1a1a1a);          /* primary text */
+  --text-2:    var(--figma-color-text-secondary, #888);   /* secondary / muted text, labels, hints */
+  --text-3:    var(--figma-color-text-tertiary, #b3b3b3); /* faint text: prefixes, placeholders, chevrons */
+  --bg-3:      var(--figma-color-bg-tertiary, #e9e9e9);   /* pills, switch track, scrollbar thumb */
+
+  /* ---- color: brand & semantic ---- */
+  --brand:      var(--figma-color-bg-brand, #0d99ff);     /* primary action, active states, focus accents */
+  --brand-text: var(--figma-color-text-onbrand, #fff);    /* text/icon color on top of --brand */
+  --text-brand: var(--figma-color-text-brand, #007be5);   /* brand-colored text on a normal surface (links, aliases) */
+  --red:        var(--figma-color-text-danger, #f24822);  /* error text */
+  /* Status surfaces are mixed from the text color rather than taken from Figma's
+     bg-*-secondary tokens, which are solid fills in the dark theme. */
+  --red-bg:     color-mix(in srgb, var(--red) 12%, var(--bg));   /* error surface (tint) */
+  --red-solid:  var(--figma-color-bg-danger, #f24822);     /* destructive fill (danger button, danger menu hover) */
+  --warn:       var(--figma-color-text-warning, #b86200);  /* warning text */
+  --warn-bg:    color-mix(in srgb, var(--warn) 14%, var(--bg));  /* warning surface (tint) */
+  --success:    var(--figma-color-icon-success, #14ae5c);  /* "live" / ok indicator dot */
+
+  /* ---- elevation (floating layers only: tooltip, menu, dialog) ---- */
+  --shadow-float: 0 8px 24px rgba(0, 0, 0, .3);
+  --scrim:        rgba(0, 0, 0, .35);
+
+  /* ---- typography ---- */
+  --font-ui:   Inter, -apple-system, system-ui, sans-serif;
+  --mono:      ui-monospace, Menlo, Consolas, monospace;
+
+  /* ---- type scale (used inline throughout components.css) ----
+     11px  – secondary/meta text (counts, hints, table sub-lines)
+     12px  – base body size (default on <html>)
+     13px  – panel title
+     Weights: 400 body, 500 buttons/tabs/labels, 600 emphasis/headings */
+}
+
+/* Two extra reference-only tokens some UI components below hard-code by hex
+   rather than a --figma-* variable, because they're Figma editor accent
+   colors (component purple, slot pink) rather than theme-adaptive tokens.
+   Keep them literal if you copy those components. */
+:root {
+  --figma-component-purple: #8a38f5;
+  --figma-slot-pink: #ff45c0;
+}
+
+* { box-sizing: border-box; }
+
+/* Native scrollbars render light-on-light in dark theme, so paint them from
+   theme tokens instead. color-scheme covers overlay scrollbars some
+   platforms draw; the webkit rules cover the rest. */
+html { color-scheme: light dark; }
+::-webkit-scrollbar { width: 11px; height: 11px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background-color: var(--figma-color-bg-tertiary, #c9c9cd);
+  border: 3px solid transparent;
+  border-radius: 6px;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover { background-color: var(--text-2); background-clip: padding-box; }
+
+/* Figma injects its theme <style> ahead of the plugin's HTML, so the page runs
+   in quirks mode, where tables don't inherit font size (they fall back to 16px). */
+table { font-size: inherit; }
+
+html, body {
+  margin: 0; padding: 0; height: 100%;
+  font-family: var(--font-ui);
+  font-size: 12px; color: var(--text); background: var(--bg);
+}
+
+/* =========================================================================
+   Figma Plugins — Shared Component Library
+   =========================================================================
+   Source of truth: doc/design-system/. Do not edit the copy inside a plugin's
+   ui.html (between the @ds markers) — edit here, then `node scripts/sync-ds.mjs`.
+   Load tokens.css first. Every color/spacing value here references a
+   variable from tokens.css — don't hard-code new hex values into a
+   component; add a token instead so both files stay themeable.
+
+   General conventions used throughout:
+   - Border radius: 4px (xs controls) / 5-6px (default) / 50% (circular icon buttons)
+   - Border: 1px solid var(--border) almost everywhere
+   - Font sizes: 11px (meta/secondary), 12px (body/default), 13px (title)
+   - Font weights: 400 (body), 500 (interactive labels), 600 (emphasis)
+   - Hover = var(--bg-hover) background swap, no color/shadow tricks
+   - Active/selected = var(--bg-sel) background + var(--brand) border
+   ========================================================================= */
+
+body { display: flex; flex-direction: column; height: 100vh; }
+
+/* ---- app header ---- */
+header {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 8px 12px; border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+header .hrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+header .title { font-weight: 600; font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* right-hand cluster of the top row: actions, then the language toggle last */
+.hactions { display: flex; align-items: center; gap: 6px; margin-left: auto; flex-shrink: 0; }
+
+/* ---- segmented control (e.g. language switch, unit toggle) ---- */
+.lang-toggle, .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.lang-btn, .seg-btn {
+  border: none; border-radius: 0; padding: 4px 11px; font-size: 12px;
+  background: var(--bg); color: var(--text-2); font-weight: 500; cursor: pointer;
+}
+.seg-btn { padding: 4px 10px; font-size: 11px; font-family: var(--mono); }
+.seg-btn + .seg-btn { border-left: 1px solid var(--border); }
+.lang-btn.active, .seg-btn.active { background: var(--brand); color: var(--brand-text); }
+.seg-btn.active { font-weight: 600; }
+.lang-btn:hover:not(.active), .seg-btn:hover:not(.active) { background: var(--bg-hover); }
+
+/* ---- layout shell: header / scrolling body ---- */
+/* `main` itself never scrolls — only `.tabbody` does, so scrolling inside a
+   tab can't drag the whole panel. */
+main {
+  flex: 1; min-height: 0; padding: 0; position: relative;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.top-fixed { flex-shrink: 0; padding: 12px 12px 0; }
+.tabbody { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; }
+
+.muted { color: var(--text-2); }
+.center-msg {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; height: 100%; gap: 10px; color: var(--text-2); padding: 24px;
+}
+.empty-pane {
+  height: 100%; display: flex; align-items: center; justify-content: center;
+  color: var(--text-2); text-align: center; padding: 8px;
+}
+.empty { padding: 34px 18px; text-align: center; color: var(--text-2); line-height: 1.5; }
+.empty .empty-t { font-weight: 600; color: var(--text); margin-bottom: 4px; font-size: 12px; }
+
+/* ---- buttons ---- */
+button {
+  padding: 7px 12px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--bg); color: var(--text); font-family: inherit; font-size: 12px;
+  cursor: pointer; font-weight: 500;
+}
+button:hover:not(:disabled) { background: var(--bg-hover); }
+button:disabled { opacity: 0.38; cursor: default; }
+button.primary { background: var(--brand); color: var(--brand-text); border-color: var(--brand); }
+button.primary:hover:not(:disabled) { filter: brightness(1.05); }
+button.ghost { border-color: transparent; background: transparent; color: var(--text-2); }
+button.ghost:hover:not(:disabled) { background: var(--bg-hover); }
+button.full { width: 100%; }
+button.sm { padding: 4px 8px; }
+/* Secondary note inside a button, e.g. the scope of an action: "토큰 정리 · 현재 페이지" */
+button .scope { color: var(--text-2); font-weight: 400; }
+button .scope::before { content: '· '; }
+button.xs { padding: 3px 7px; font-size: 11px; border-radius: 4px; }
+
+.icon-btn {
+  width: 30px; height: 26px; padding: 0; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.icon-btn svg { width: 22px; height: 22px; display: block; }
+
+/* ---- breadcrumb / back bar (navigation history) ---- */
+.navbar {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 10px; background: var(--bg-2);
+  border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.navbar .trail {
+  flex: 1; min-width: 0; font-size: 11px; color: var(--text); font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.navbtn {
+  width: 26px; height: 26px; padding: 0; border-radius: 50%; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border); background: var(--bg); color: var(--text);
+}
+.navbtn svg { width: 15px; height: 15px; display: block; }
+.navbtn:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--text-2); }
+.navbar .lang-toggle, header .lang-toggle { flex-shrink: 0; }
+/* the language toggle is always compact in the top row (header or navbar) */
+.navbar .lang-btn, header .lang-btn { padding: 2px 8px; font-size: 11px; }
+
+/* ---- floating tooltip ---- */
+/* position:fixed and outside scroll containers, so a pane with overflow:auto
+   can't clip it. */
+.tip {
+  position: fixed; z-index: 200; max-width: 250px;
+  background: var(--figma-color-bg-inverse, #1e1e1e);
+  color: var(--figma-color-text-oninverse, #fff);
+  padding: 7px 9px; border-radius: 6px; font-size: 11px; line-height: 1.45;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .3); pointer-events: none;
+}
+.tinfo {
+  width: 11px; height: 11px; margin-left: 4px; flex-shrink: 0;
+  display: inline-flex; align-items: center; vertical-align: -1px;
+  opacity: .8; cursor: help; pointer-events: auto;
+}
+.tinfo:hover { opacity: 1; }
+.tinfo svg { width: 100%; height: 100%; display: block; }
+
+/* ---- resizable panes (drag handle, like a layers panel) ---- */
+.rbox { position: relative; }
+.rbox-body { overflow-y: auto; overflow-x: hidden; }
+.rhandle {
+  height: 11px; margin: 0 0 4px; cursor: ns-resize; user-select: none;
+  display: flex; align-items: center; justify-content: center;
+}
+.rhandle::after {
+  content: ""; width: 30px; height: 2px; border-radius: 2px;
+  background: var(--border); transition: background .1s ease;
+}
+.rhandle:hover::after { background: var(--text-2); }
+
+/* ---- tabs ---- */
+.tabs {
+  display: flex; gap: 2px; margin: 0 -12px 0; padding: 0 10px;
+  background: var(--bg); border-bottom: 1px solid var(--border);
+}
+.tab {
+  border: none; background: transparent; border-radius: 0; margin-bottom: -1px;
+  padding: 9px 10px; font-size: 12px; font-weight: 500; color: var(--text-2);
+  border-bottom: 2px solid transparent; cursor: pointer;
+  display: flex; align-items: center; gap: 5px; white-space: nowrap;
+}
+.tab:hover:not(:disabled) { background: transparent; }
+.tab:hover:not(:disabled):not(.active) { color: var(--text); }
+.tab.active { color: var(--text); font-weight: 600; border-bottom-color: var(--brand); }
+.tab:disabled { opacity: .35; cursor: default; }
+.tab .tb {
+  font-size: 10px; font-weight: 600; color: var(--text-2);
+  background: var(--figma-color-bg-tertiary, #e9e9e9);
+  border-radius: 8px; padding: 0 6px; line-height: 15px;
+}
+.tab.active .tb { color: var(--text); }
+
+/* ---- collapsible section ---- */
+.sec { margin: 0 -12px; }
+.sec-head {
+  position: sticky; top: -12px; z-index: 5;
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 12px; background: var(--bg-2);
+  border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+  font-weight: 600; font-size: 12px; cursor: pointer; user-select: none;
+}
+.sec-head:hover { background: var(--bg-hover); }
+.sec-head .caret {
+  width: 15px; flex-shrink: 0; color: var(--text-2); font-size: 14px;
+  line-height: 1; transition: transform .1s ease; display: inline-block;
+  transform-origin: 45% 50%;
+}
+.sec-head.closed .caret { transform: rotate(-90deg); }
+.sec-head .sc { color: var(--text-2); font-weight: 400; }
+.sec-actions { margin-left: auto; display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.sec-actions button { font-weight: 500; }
+.sec-actions .mini {
+  padding: 2px 4px; font-size: 11px; border: 1px solid var(--border);
+  border-radius: 5px; background: var(--bg); color: var(--text);
+  font-family: inherit; font-weight: 500;
+}
+.sec-actions .mini:disabled { opacity: .45; }
+.sec-body { padding: 8px 12px 10px; }
+.sec-body.hidden { display: none; }
+
+/* ---- property row (label / value pair) ---- */
+.prow { display: flex; align-items: baseline; gap: 8px; padding: 2px 0; line-height: 1.5; }
+.prow .pk { color: var(--text-2); width: 104px; flex-shrink: 0; }
+.prow .pv { flex: 1; min-width: 0; word-break: break-word; }
+.prow.flag .pv { color: var(--brand); font-weight: 600; }
+.copy { cursor: pointer; border-radius: 3px; padding: 1px 3px; margin: 0 -3px; }
+.copy:hover { background: var(--bg-hover); }
+.mono { font-family: var(--mono); }
+
+/* ---- token pill (e.g. a bound variable name) ---- */
+.tok {
+  display: inline-block; margin-left: 6px; font-size: 11px; font-family: var(--mono);
+  padding: 1px 6px; border-radius: 4px; word-break: break-all; cursor: pointer;
+  background: var(--figma-color-bg-tertiary, #e9e9e9);
+  color: var(--text); border: 1px solid var(--border);
+}
+.tok:hover { background: var(--bg-hover); border-color: var(--text-2); }
+.tok-none {
+  display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 4px;
+  color: var(--text-2); border: 1px dashed var(--border); font-style: italic;
+}
+
+/* ---- swatch (color preview square) ---- */
+.sw {
+  width: 10px; height: 10px; border-radius: 2px; border: 1px solid var(--border);
+  display: inline-block; vertical-align: -1px; margin-right: 5px; flex-shrink: 0;
+}
+
+/* checkerboard background for translucent/transparent content previews */
+.checker {
+  background-color: #f0f0f2;
+  background-image:
+    linear-gradient(45deg, #dededf 25%, transparent 25%, transparent 75%, #dededf 75%),
+    linear-gradient(45deg, #dededf 25%, transparent 25%, transparent 75%, #dededf 75%);
+  background-size: 10px 10px;
+  background-position: 0 0, 5px 5px;
+}
+
+/* ---- labeled field chip (e.g. layout inspector: "W 240") ---- */
+.lp { display: flex; flex-direction: column; gap: 8px; }
+.lp-row { display: flex; align-items: flex-start; gap: 8px; }
+.lp-row .lp-label { width: 96px; flex-shrink: 0; color: var(--text-2); padding-top: 5px; line-height: 1.3; }
+.lp-fields { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.lp-fields.cols4 { display: grid; grid-template-columns: repeat(4, 1fr); flex-wrap: nowrap; }
+.lp-fields.cols4 .lp-field { min-width: 0; }
+.lp-fields.cols4 .lp-fv { overflow: hidden; text-overflow: ellipsis; }
+.lp-field {
+  display: inline-flex; align-items: center; gap: 5px; min-width: 0;
+  padding: 4px 7px; border: 1px solid var(--border); border-radius: 5px;
+  background: var(--bg-2); max-width: 100%;
+}
+.lp-field .lp-fk {
+  font-size: 10px; font-weight: 600; color: var(--text-2); flex-shrink: 0;
+  letter-spacing: .02em; text-transform: uppercase;
+}
+.lp-field .lp-fv { font-family: var(--mono); word-break: break-all; }
+.lp-field .lp-fm { color: var(--text-2); font-size: 11px; flex-shrink: 0; }
+.lp-field .tok { margin-left: 1px; }
+.lp-ic { width: 12px; height: 12px; flex-shrink: 0; color: var(--text-2); display: inline-flex; }
+.lp-ic svg { width: 100%; height: 100%; display: block; }
+
+/* ---- checkbox row (custom checkbox, ticks/toggles) ---- */
+.lp-check, .hcheck {
+  display: inline-flex; align-items: center; gap: 6px; color: var(--text-2);
+}
+.hcheck { gap: 5px; flex-shrink: 0; padding: 2px 5px; border-radius: 4px; cursor: pointer; user-select: none; font-weight: 500; }
+.hcheck:hover { background: var(--bg-hover); color: var(--text); }
+.hcheck.on { color: var(--text); }
+.lp-check .box, .hcheck .box {
+  width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--border);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 9px; line-height: 1; flex-shrink: 0; background: var(--bg);
+}
+.lp-check.on .box, .hcheck.on .box { background: var(--brand); border-color: var(--brand); color: var(--brand-text); }
+.lp-check.on { color: var(--text); }
+
+/* ---- subsection divider inside a section (e.g. Fill / Stroke groups) ---- */
+.subsec {
+  font-weight: 600; margin: 12px 0 6px; padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.subsec:first-child { margin-top: 0; padding-top: 0; border-top: none; }
+
+/* ---- data table ---- */
+.tr-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 6px; }
+/* table-layout:fixed makes a dragged column width land exactly */
+.tr-table { border-collapse: separate; border-spacing: 0; min-width: 100%; font-size: 12px; table-layout: fixed; }
+.tr-table th, .tr-table td {
+  padding: 6px 9px; text-align: left; vertical-align: top;
+  border-bottom: 1px solid var(--border); white-space: pre-wrap; overflow-wrap: break-word;
+}
+.tr-table tr:last-child th, .tr-table tr:last-child td { border-bottom: none; }
+.tr-table thead th {
+  background: var(--bg-2); font-weight: 600; position: sticky; top: 0; z-index: 2;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tr-table thead th .tr-def { color: var(--text-2); font-weight: 400; font-size: 11px; }
+.tr-name {
+  position: sticky; left: 0; z-index: 1; background: var(--bg);
+  font-weight: 600; word-break: break-all; border-right: 1px solid var(--border);
+}
+.tr-desc { color: var(--text-2); font-weight: 400; word-break: break-word; border-right: 1px solid var(--border); }
+.tr-desc.none { color: var(--text-2); opacity: .55; }
+.tr-table thead .tr-name { z-index: 3; background: var(--bg-2); }
+.tr-table tbody tr { cursor: pointer; }
+.tr-table tbody td:hover, .tr-table tbody .tr-name:hover { background: var(--bg-hover); }
+.tr-table td.empty { color: var(--red); font-style: italic; }
+.tr-sub { color: var(--text-2); font-weight: 400; font-size: 11px; margin-top: 2px; }
+/* copy affordance revealed on cell hover */
+.cp-ic { margin-left: 5px; color: var(--text-2); visibility: hidden; font-size: 11px; }
+.tr-table td:hover .cp-ic, .tr-table .tr-name:hover .cp-ic { visibility: visible; }
+/* column resize handle */
+.colres { position: absolute; top: 0; right: -4px; bottom: 0; width: 9px; cursor: col-resize; z-index: 6; }
+.colres::after {
+  content: ""; position: absolute; left: 4px; top: 0; bottom: 0; width: 1px;
+  background: var(--brand); opacity: 0; transition: opacity .1s ease;
+}
+.colres:hover::after, .colres.on::after { opacity: 1; }
+.tr-pad { padding: 0 !important; }
+
+/* ---- form controls ---- */
+select, .exp-num, .exp-suffix {
+  padding: 5px 6px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); color: var(--text); font-family: inherit; font-size: 12px;
+}
+select { font-size: 11px; cursor: pointer; }
+select:disabled { opacity: .4; cursor: default; }
+.exp-num { width: 56px; padding: 5px 6px; }
+
+/* range slider */
+.thumb-size {
+  width: 64px; height: 20px; margin: 0 3px; padding: 0; cursor: pointer; flex-shrink: 0;
+  -webkit-appearance: none; appearance: none; background: transparent;
+}
+.thumb-size::-webkit-slider-runnable-track { height: 5px; border-radius: 3px; background: var(--text-2); opacity: .5; }
+.thumb-size:hover::-webkit-slider-runnable-track { opacity: .75; }
+.thumb-size::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; margin-top: -4px;
+  width: 13px; height: 13px; border-radius: 50%;
+  background: var(--brand); cursor: pointer;
+  border: 2px solid var(--bg); box-shadow: 0 0 0 1px var(--text-2);
+}
+
+/* ---- card ---- */
+.card { border: 1px solid var(--border); border-radius: 6px; padding: 7px 9px; margin-bottom: 6px; }
+.card-head { display: flex; align-items: center; gap: 6px; }
+.card-head .ch-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.card-head .ch-sub { color: var(--text-2); font-size: 11px; }
+.card.own { border-color: var(--brand); }
+.card.clickable { cursor: pointer; }
+.card.clickable:hover { background: var(--bg-hover); }
+/* selected/picked state, reused for tree rows and cards alike */
+.picked { background: var(--bg-sel) !important; border-color: var(--brand) !important; border-radius: 6px; }
+
+/* ---- header/summary card (e.g. an inspected item's identity block) ---- */
+.var-head { background: var(--bg-2); border-radius: 6px; padding: 8px 10px; }
+.var-head .leaf { font-weight: 600; word-break: break-all; }
+.var-head .grp { color: var(--text-2); font-size: 11px; word-break: break-all; margin-top: 3px; }
+.var-head .desc {
+  margin-top: 7px; padding-top: 7px; border-top: 1px solid var(--border);
+  color: var(--text-2); line-height: 1.45; white-space: pre-wrap; word-break: break-word;
+}
+.badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.badge {
+  font-size: 11px; padding: 1px 7px; border-radius: 10px;
+  background: var(--bg); border: 1px solid var(--border); color: var(--text-2);
+}
+.badge.b-main { background: var(--bg); border-color: var(--text-2); color: var(--text); font-weight: 600; }
+.head-actions { display: flex; gap: 6px; margin-top: 8px; }
+.head-actions button { flex: 1; }
+
+/* ---- style pill (e.g. a picked text/fill/effect style) ---- */
+.style-pill {
+  display: flex; align-items: center; gap: 6px; width: 100%;
+  padding: 7px 9px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); cursor: pointer; text-align: left; margin-bottom: 6px;
+}
+.style-pill:hover { background: var(--bg-hover); }
+.style-pill .sp-name { flex: 1; min-width: 0; font-weight: 600; word-break: break-all; }
+.style-pill .sp-hint { color: var(--text-2); font-size: 11px; flex-shrink: 0; }
+.sp-icon {
+  width: 15px; height: 15px; flex-shrink: 0; color: var(--text-2);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.sp-icon svg { width: 100%; height: 100%; display: block; }
+.thidden { font-size: 11px; color: var(--text-2); flex-shrink: 0; }
+
+/* ---- tree row (nested, expandable list — e.g. a layer/component tree) ---- */
+.trow {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 6px; border-radius: 6px; cursor: pointer; border: 1px solid transparent;
+  user-select: none;
+}
+.trow:hover { background: var(--bg-hover); }
+.trow.current { cursor: default; }
+.trow.self { background: var(--bg-sel); border-color: var(--brand); }
+.trow.origin { background: var(--bg-sel); border-color: var(--brand) !important; }
+.trow .tname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trow .tsub { color: var(--text-2); font-size: 11px; flex-shrink: 0; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trow .tglyph { flex-shrink: 0; color: var(--text-2); font-size: 11px; }
+.tkids { margin-left: 9px; padding-left: 8px; border-left: 1px solid var(--border); }
+.tcount { color: var(--text-2); font-size: 11px; flex-shrink: 0; }
+.tcaret {
+  width: 17px; height: 17px; flex-shrink: 0; text-align: center; color: var(--text-2);
+  font-size: 14px; line-height: 17px; cursor: pointer; border-radius: 3px;
+  transform-origin: 45% 50%;
+}
+.tcaret:hover { background: var(--bg-hover); color: var(--text); }
+.tcaret.closed { transform: rotate(-90deg); }
+.tcaret.leaf { cursor: default; opacity: 0; }
+/* secondary action revealed only on hover of its row */
+.trow .tmain { visibility: hidden; }
+.trow:hover .tmain, .trow.current .tmain { visibility: visible; }
+
+/* ---- thumbnail (with checkerboard for transparency) ---- */
+.tthumb, .icon-prev {
+  flex-shrink: 0; border: 1px solid var(--border); border-radius: 3px; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+}
+.tthumb {
+  margin-right: 2px;
+  background-color: #f0f0f2;
+  background-image:
+    linear-gradient(45deg, #dededf 25%, transparent 25%, transparent 75%, #dededf 75%),
+    linear-gradient(45deg, #dededf 25%, transparent 25%, transparent 75%, #dededf 75%);
+  background-size: 8px 8px; background-position: 0 0, 4px 4px;
+}
+.tthumb img, .icon-prev img { max-width: 100%; max-height: 100%; display: block; }
+.icon-prev {
+  width: 44px; height: 44px; margin-right: 9px; border-radius: 4px;
+  background-color: #f0f0f2;
+  background-image:
+    linear-gradient(45deg, #dededf 25%, transparent 25%, transparent 75%, #dededf 75%),
+    linear-gradient(45deg, #dededf 25%, transparent 25%, transparent 75%, #dededf 75%);
+  background-size: 10px 10px; background-position: 0 0, 5px 5px;
+}
+.icon-prev img { max-width: 82%; max-height: 82%; }
+
+/* ---- category tags (fixed brand colors — match Figma's own editor accents) ---- */
+/* Slot pink, matching the color Figma gives slots in the editor. */
+.tslot {
+  flex-shrink: 0; font-size: 10px; font-weight: 600; line-height: 16px;
+  text-transform: uppercase; letter-spacing: .03em; padding: 0 6px; border-radius: 8px;
+  color: var(--figma-slot-pink); background: rgba(255, 69, 192, .14); border: 1px solid rgba(255, 69, 192, .45);
+}
+/* Component purple, matching the color Figma gives components in the editor. */
+.tvariant {
+  flex-shrink: 0; font-size: 10px; font-weight: 600; line-height: 16px;
+  text-transform: uppercase; letter-spacing: .03em; padding: 0 6px; border-radius: 8px;
+  color: var(--figma-component-purple); background: rgba(138, 56, 245, .14); border: 1px solid rgba(138, 56, 245, .5);
+}
+.text-badge {
+  flex-shrink: 0; font-size: 10px; font-weight: 600; line-height: 16px;
+  text-transform: uppercase; letter-spacing: .03em; padding: 0 6px; border-radius: 8px;
+  color: var(--text-2); border: 1px solid var(--border); background: var(--bg-2);
+}
+
+/* ---- auto layout direction widget ---- */
+.al-widget { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.al-grid {
+  width: 46px; height: 46px; flex-shrink: 0; padding: 4px;
+  display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr);
+  border: 1px solid var(--border); border-radius: 4px; background: var(--bg-2);
+}
+.al-cell { display: flex; align-items: center; justify-content: center; }
+.al-cell .dot { width: 2px; height: 2px; border-radius: 50%; background: var(--text-2); opacity: .55; }
+.al-bars { display: flex; align-items: center; justify-content: center; gap: 2px; }
+.al-bars.spread { justify-content: space-between; }
+.al-bars.h { flex-direction: row; height: 100%; }
+.al-bars.v { flex-direction: column; width: 100%; }
+.al-bar { background: var(--brand); border-radius: 1px; }
+.al-bars.h .al-bar { width: 3px; height: 9px; }
+.al-bars.v .al-bar { width: 9px; height: 3px; }
+.al-caption .al-dir { font-weight: 600; }
+.al-caption .al-sub { color: var(--text-2); font-size: 11px; margin-top: 2px; }
+
+/* ---- content / code preview box ---- */
+.content-box {
+  font-family: var(--mono); background: var(--bg-2); padding: 6px 8px;
+  border-radius: 4px; word-break: break-word; white-space: pre-wrap; max-height: 120px; overflow-y: auto;
+}
+.detail-box { border-left: 2px solid var(--border); padding: 4px 0 4px 10px; margin: 0 0 8px 4px; }
+.hidden-flag { color: var(--text-2); font-size: 11px; }
+
+/* ---- pagination ---- */
+.pager {
+  position: sticky; top: 22px; z-index: 4;
+  display: flex; align-items: center; gap: 6px;
+  margin: 0 -12px 8px; padding: 6px 12px;
+  background: var(--bg); border-bottom: 1px solid var(--border);
+}
+.pager .pgbtn { display: inline-flex; align-items: center; padding: 2px 5px; }
+.pager .pgbtn svg { width: 13px; height: 13px; display: block; }
+.pager .pgbtn:disabled { opacity: .35; cursor: default; }
+.pg-n { font-weight: 600; font-size: 11px; }
+.pg-range { margin-left: auto; color: var(--text-2); font-size: 11px; }
+
+/* ---- misc row/list primitives seen across panels ---- */
+.paint-row { display: flex; align-items: baseline; flex-wrap: wrap; padding: 2px 0; line-height: 1.5; }
+.paint-row .pv-line { width: 100%; }
+.pv-line { margin-top: 3px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.pv-line .tok { margin-left: 0; }
+.arrow { color: var(--text-2); flex-shrink: 0; }
+.sc-row { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border: 1px solid transparent; border-radius: 6px; cursor: pointer; }
+.sc-row:hover { background: var(--bg-hover); }
+.sc-sw {
+  width: 16px; height: 16px; border-radius: 4px; flex-shrink: 0; border: 1px solid var(--border);
+  background-image:
+    linear-gradient(45deg, #c8c8cc 25%, transparent 25%, transparent 75%, #c8c8cc 75%),
+    linear-gradient(45deg, #c8c8cc 25%, transparent 25%, transparent 75%, #c8c8cc 75%);
+  background-size: 8px 8px; background-position: 0 0, 4px 4px; background-color: #fff;
+  position: relative; overflow: hidden;
+}
+.sc-sw i { position: absolute; inset: 0; display: block; }
+.sc-val { font-family: var(--mono); flex-shrink: 0; }
+.sc-mid { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.sc-count { color: var(--text-2); font-size: 11px; flex-shrink: 0; }
+.eff-item { padding: 4px 0 0; }
+.eff-item + .eff-item { border-top: 1px dashed var(--border); margin-top: 4px; }
+.eff-title { display: flex; align-items: center; gap: 6px; }
+.eff-title .et-label { font-weight: 500; }
+.eff-title .et-sum { color: var(--text-2); font-family: var(--mono); font-size: 11px; word-break: break-all; }
+
+/* ---- Export-panel specific composites ---- */
+.exp-row { display: flex; align-items: center; gap: 4px; margin-bottom: 6px; flex-shrink: 0; }
+.exp-row .grow { flex: 1; min-width: 0; }
+.exp-row select { min-width: 0; }
+.dots { letter-spacing: 1px; padding: 4px 6px; }
+.dots.on { color: var(--brand); background: var(--bg-sel); }
+.dots.has-opts:not(.on) { color: var(--text); }
+.exp-more { border: 1px solid var(--border); border-radius: 6px; padding: 8px 9px; margin: 0 0 8px; background: var(--bg-2); }
+.exp-more-t { font-weight: 600; margin-bottom: 6px; }
+.exp-more .pk { width: 92px; }
+.exp-more select, .exp-suffix { width: 100%; }
+.exp-checks { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.exp-more .hcheck { padding-left: 0; }
+.exp-preview { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 8px; }
+.exp-preview-box {
+  margin-top: 8px; padding: 10px; border: 1px solid var(--border); border-radius: 6px;
+  display: flex; align-items: center; justify-content: center; min-height: 60px;
+  background-color: #f0f0f2;
+  background-image:
+    linear-gradient(45deg, #dededf 25%, transparent 25%, transparent 75%, #dededf 75%),
+    linear-gradient(45deg, #dededf 25%, transparent 25%, transparent 75%, #dededf 75%);
+  background-size: 12px 12px; background-position: 0 0, 6px 6px;
+}
+.exp-preview-img { max-width: 100%; max-height: 220px; display: block; }
+.exp-controls { display: flex; gap: 6px; align-items: center; margin-top: 8px; }
+.exp-controls .grow { flex: 1; }
+.tok-opts { margin: 0 0 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+.tok-opts-head { display: flex; align-items: center; gap: 4px; color: var(--text-2); font-size: 11px; margin-bottom: 6px; }
+.all-opts { padding-top: 2px; }
+
+/* =========================================================================
+   Additions shared by i18n / Config Manager / Arrow Connect /
+   Change Marker. Same visual language as above: tokens only, 6px radius,
+   12px text, hover = --bg-hover, focus/selected = --brand.
+   ========================================================================= */
+
+/* ---- text inputs ---- */
+input:not([type]), input[type="text"], input[type="password"], input[type="number"],
+input[type="search"], input[type="date"], textarea {
+  padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); color: var(--text); font-family: inherit; font-size: 12px;
+  min-width: 0;
+}
+textarea { line-height: 1.4; resize: vertical; }
+input:not([type]):focus, input[type="text"]:focus, input[type="password"]:focus, input[type="number"]:focus,
+input[type="search"]:focus, input[type="date"]:focus, textarea:focus, select:focus { outline: none; border-color: var(--brand); }
+input:disabled, textarea:disabled { opacity: .4; }
+input.invalid, textarea.invalid { border-color: var(--red); }
+::placeholder { color: var(--text-3); }
+/* borderless until hovered — inline rename fields */
+input.bare { border-color: transparent; background: transparent; }
+input.bare:hover { border-color: var(--border); }
+input.bare:focus { border-color: var(--brand); background: var(--bg); }
+
+/* labeled field: small muted label above its control */
+.field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+.field > label, .field > .lbl { color: var(--text-2); font-size: 11px; font-weight: 500; }
+.field-err { color: var(--red); font-size: 11px; }
+
+/* ---- semantic buttons ---- */
+button.danger { color: var(--red); }
+button.danger-fill { background: var(--red-solid); border-color: var(--red-solid); color: var(--brand-text); }
+button.danger-fill:hover:not(:disabled) { background: var(--red-solid); filter: brightness(1.05); }
+button.selected { background: var(--bg-sel); border-color: transparent; color: var(--text-brand); }
+button.selected:disabled { opacity: 1; }
+
+/* ---- small pills: warning / danger / link variants of .badge ---- */
+.badge.warn { background: var(--warn-bg); border-color: transparent; color: var(--warn); }
+.badge.danger { background: var(--red-bg); border-color: transparent; color: var(--red); }
+.badge.link { background: var(--bg-sel); border-color: transparent; color: var(--text-brand); cursor: pointer; }
+
+/* ---- inline notices ---- */
+.notice {
+  display: flex; align-items: center; gap: 8px; padding: 7px 9px; margin-bottom: 8px;
+  border: 1px dashed var(--border); border-radius: 6px; color: var(--text-2); font-size: 11px; line-height: 1.4;
+}
+.notice > span:not(.ico) { flex: 1; }
+/* Colored text on a tinted surface is hard to read (especially in dark mode),
+   so status notices keep body text at --text and carry the color in a left bar. */
+.notice.err, .notice.warn, .notice.info {
+  border-style: solid; border-width: 1px 1px 1px 3px; color: var(--text); font-size: 12px; line-height: 1.45;
+}
+.notice.err { border-color: var(--red); background: var(--red-bg); }
+.notice.warn { border-color: var(--warn); background: var(--warn-bg); }
+.notice.info { border-color: var(--border); border-left-color: var(--brand); background: var(--bg-2); }
+.notice .ico { flex: 0 0 14px; width: 14px; height: 14px; margin-top: 1px; }
+.notice.err .ico { color: var(--red); }
+.notice.warn .ico { color: var(--warn); }
+
+/* ---- toast (in-panel, bottom) ---- */
+.toast {
+  position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 60;
+  padding: 8px 10px; border-radius: 6px; font-size: 12px; white-space: pre-line;
+  background: var(--red-bg); color: var(--red); display: none;
+}
+.toast.show { display: block; }
+.toast.warn { background: var(--warn-bg); color: var(--warn); }
+
+/* ---- modal dialog (Figma's iframe blocks window.confirm/prompt) ---- */
+.overlay {
+  position: fixed; inset: 0; z-index: 100; padding: 16px;
+  background: var(--scrim); display: flex; align-items: center; justify-content: center;
+}
+.dialog {
+  width: 100%; max-width: 360px; padding: 12px; border-radius: 6px;
+  background: var(--bg); border: 1px solid var(--border); box-shadow: var(--shadow-float);
+  display: flex; flex-direction: column; gap: 12px;
+}
+.dialog input { width: 100%; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 6px; }
+
+/* ---- dropdown menu (dark, like Figma's own menus) ---- */
+.menu {
+  position: fixed; z-index: 110; min-width: 200px; max-width: 320px; padding: 6px;
+  background: var(--figma-color-bg-menu, #1e1e1e); color: var(--figma-color-text-menu, #fff);
+  border-radius: 6px; box-shadow: var(--shadow-float);
+  font-size: 12px; line-height: 18px; display: flex; flex-direction: column;
+}
+.menu input[type="text"] {
+  background: rgba(255, 255, 255, .08); border-color: transparent; color: inherit; margin-bottom: 4px;
+}
+.menu input[type="text"]:focus { border-color: var(--brand); }
+.menu-list { overflow-y: auto; }
+.menu-group { padding: 6px 8px 2px; font-size: 11px; opacity: .55; }
+.menu-item { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
+.menu-item .meta { margin-left: auto; opacity: .55; font-size: 11px; white-space: nowrap; }
+.menu-item .check { width: 12px; flex: none; text-align: center; }
+.menu-item:hover, .menu-item.active { background: var(--brand); color: var(--brand-text); }
+.menu-item:hover .meta, .menu-item.active .meta { opacity: .85; }
+.menu-item.danger { color: var(--figma-color-text-menu-danger, #ff8a7a); }
+.menu-item.danger:hover, .menu-item.danger.active { background: var(--red-solid); color: var(--brand-text); }
+.menu-empty { padding: 8px; opacity: .6; }
+.menu-sep { height: 1px; margin: 4px 2px; background: rgba(255, 255, 255, .12); }
+
+/* ---- toggle switch (on <input type=checkbox class=switch> or a <span>) ---- */
+.switch {
+  appearance: none; -webkit-appearance: none; position: relative; flex: none; margin: 0; cursor: pointer;
+  width: 28px; height: 16px; border-radius: 8px; background: var(--bg-3); transition: background .12s;
+}
+.switch::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 6px;
+  background: var(--figma-color-icon-onbrand, #fff); box-shadow: 0 1px 2px rgba(0, 0, 0, .25); transition: left .12s;
+}
+.switch:checked, .switch.on { background: var(--brand); }
+.switch:checked::after, .switch.on::after { left: 14px; }
+.switch:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+/* ---- window resize grip (bottom-right; plugin resizes itself via figma.ui.resize) ---- */
+.resize-grip {
+  position: fixed; right: 0; bottom: 0; width: 14px; height: 14px; cursor: nwse-resize; z-index: 120;
+  background: linear-gradient(135deg, transparent 50%, var(--text-3) 50%, var(--text-3) 58%, transparent 58%,
+    transparent 70%, var(--text-3) 70%, var(--text-3) 78%, transparent 78%);
+}
+
+/* ---- busy spinner ---- */
+.spin {
+  width: 13px; height: 13px; border-radius: 50%; flex-shrink: 0; display: inline-block;
+  border: 2px solid var(--border); border-top-color: var(--brand); animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---- footer bar ---- */
+.foot {
+  flex-shrink: 0; padding: 8px 12px; border-top: 1px solid var(--border);
+  font-size: 11px; color: var(--text-2); line-height: 1.4;
+}
+
+/* Change Marker — plugin-specific styles.
+   Only what the design system doesn't already cover. Colors come from
+   tokens.css; the only literal colors are entry colors, set inline from data.
+   Shared pieces (inputs, .notice, .spin, .foot, button.danger) live in
+   doc/design-system/components.css. */
+
+input.wide { width: 100%; }
+.field-err { margin-top: 4px; }
+
+/* entry color swatch — larger than .sw, shows the marker's look (border + tint) */
+.esw {
+  width: 14px; height: 14px; border-radius: 3px; border: 2px solid; flex-shrink: 0;
+  position: relative; overflow: hidden;
+}
+.esw::after { content: ""; position: absolute; inset: 0; background: currentColor; opacity: .15; }
+.esw.lg { width: 20px; height: 20px; border-radius: 4px; }
+
+/* preset palette */
+.palette { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; }
+.pal {
+  aspect-ratio: 1; padding: 0; border-radius: 5px; border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+}
+.pal:hover:not(:disabled) { background: var(--bg-hover); }
+.pal.picked { border-color: var(--brand) !important; }
+.hex-row { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+.hex-row .esw { width: 26px; height: 26px; border-radius: 5px; }
+.hex-row input { font-family: var(--mono); }
+
+.card .card-meta { display: flex; align-items: center; gap: 4px; margin-top: 6px; padding-left: 20px; }
+.badge.soon { color: var(--red); border-color: var(--red); }
+
+.form-row { margin-bottom: 14px; }
+.form-row > .lbl { color: var(--text-2); font-size: 11px; font-weight: 500; margin-bottom: 6px; }
+.date-row { display: flex; align-items: center; gap: 8px; }
+.date-row input { flex: 1; min-width: 0; }
+
+.big-add { padding: 10px 12px; margin-top: 12px; }
+.detail-actions { display: flex; gap: 6px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
+.detail-actions button { flex: 1; }
+button.danger.armed { background: var(--red-bg); border-color: var(--red); }
+
+/* list header with tabs directly under the title row */
+header.has-tabs { padding-bottom: 0; border-bottom: none; }
+
+/* marker log rows (built on .trow) */
+.mrow { margin: 0 -6px; }
+.mrow .mcol { flex: 1; min-width: 0; }
+.mrow .tname { display: block; }
+.msub {
+  color: var(--text-2); font-size: 11px; margin-top: 1px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.list-head {
+  display: flex; align-items: center; justify-content: space-between;
+  font-weight: 600; margin: 18px 0 4px;
+}
+.list-head .sc { color: var(--text-2); font-weight: 400; margin-left: 2px; }
+
+/* comment text preview, exactly as it will be posted */
+.preview {
+  font-family: var(--mono); font-size: 11px; line-height: 1.5;
+  background: var(--bg-2); border: 1px solid var(--border); border-radius: 6px;
+  padding: 7px 9px; white-space: pre-wrap; word-break: break-word;
+}
+
+/* busy state: dim the panel and show a spinner, so a slow API call doesn't
+   read as a frozen plugin */
+.veil { position: fixed; inset: 0; background: var(--bg); opacity: .6; z-index: 50; }
+.veil-box {
+  position: fixed; inset: 0; z-index: 51;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  font-weight: 500; color: var(--text); pointer-events: none;
+}
+/* entry actions sit above the primary action, so they read as "this entry" */
+.detail-actions.top { margin-top: 12px; padding-top: 0; border-top: none; }
+.detail-actions.top button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+
+</style>
+</head>
+<body>
+<div id="app" style="display:contents"></div>
+<script>
+// Figma REST API client. Runs in the UI iframe: the plugin sandbox has no
+// fetch, and comments can only be created/deleted over REST.
+//
+// Auth is a personal access token with the scopes file_comments:read and
+// file_comments:write. Note the API can create and delete comments but cannot
+// edit one, so an entry's text is fixed once its comments are posted.
+
+const API = 'https://api.figma.com/v1';
+
+async function request(path, { method = 'GET', body, token }) {
+  let res;
+  try {
+    res = await fetch(API + path, {
+      method,
+      headers: { 'X-Figma-Token': token, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch (err) {
+    // `code` lets the UI show this in the current language; the message here is
+    // the English fallback.
+    throw Object.assign(new Error("Couldn't reach api.figma.com."), { code: 'errOffline' });
+  }
+  if (!res.ok) {
+    let detail = '';
+    try {
+      const data = await res.json();
+      detail = data && data.message ? ` · ${data.message}` : '';
+    } catch (err) { /* no JSON body */ }
+    // Callers check err.status: a 404 on DELETE means the comment is already
+    // gone, which is a success, not a failure.
+    const fail = (m, code) => Object.assign(new Error(m), { status: res.status, code });
+    if (res.status === 403) throw fail(`Token rejected${detail}.`, 'err403');
+    if (res.status === 404) throw fail(`Not found${detail}.`, 'err404');
+    if (res.status === 429) throw fail('Figma is rate limiting the plugin.', 'err429');
+    throw fail(`Figma API ${res.status}${detail}`);
+  }
+  return res.status === 204 ? null : res.json();
+}
+
+const api = {
+  listComments: (token, key) =>
+    request(`/files/${key}/comments`, { token }).then((r) => (r && r.comments) || []),
+
+  postComment: (token, key, message, clientMeta) =>
+    request(`/files/${key}/comments`, { method: 'POST', token, body: { message, client_meta: clientMeta } }),
+
+  deleteComment: (token, key, id) =>
+    request(`/files/${key}/comments/${id}`, { method: 'DELETE', token }),
+};
+
+// Accepts a file key or any Figma file URL.
+function parseFileKey(input) {
+  const s = input.trim();
+  const m = s.match(/figma\.com\/(?:file|design|board|proto)\/([A-Za-z0-9]+)/);
+  if (m) return m[1];
+  return /^[A-Za-z0-9]{10,}$/.test(s) ? s : null;
+}
+
+// UI strings. `t(key, vars)` reads S.lang, set from the KO/EN toggle in the
+// header and remembered per user in clientStorage. Values are plain strings, or
+// functions when they take a value. English is the fallback for a missing key.
+//
+// The plugin sandbox (code.js) keeps its own small table for the few strings it
+// shows: placement hints and figma.notify messages.
+
+const STRINGS = {
+  en: {
+    entries: 'Groups',
+    comments: 'Comments',
+    newEntry: '+ New group',
+    settings: 'Token and file settings',
+    syncTitle: 'Sync and delete expired comments',
+    foot: "Plugins can't run in the background: expired comments are deleted the next time this plugin is opened on or after their date.",
+
+    noEntriesTitle: 'No comment groups yet',
+    noEntriesBody: 'Create a group for a round of changes, then post color-coded comments on the parts you changed.',
+    noCommentsTitle: 'No comments yet',
+    noCommentsBody: 'Open a group, bring the changed spot into view and press “Add comment”.',
+    noCommentsHint: 'No comments yet.',
+
+    leftovers: (n) => `${n} comment${n === 1 ? '' : 's'} from this plugin ${n === 1 ? 'belongs' : 'belong'} to no group.`,
+    remove: 'Remove',
+    retry: 'Retry',
+
+    commentCount: (n) => `${n} comment${n === 1 ? '' : 's'}`,
+    until: (d) => `Until ${d}`,
+    daysLeft: (n) => ` · ${n}d left`,
+    indefinite: 'Indefinite',
+    createdOn: (d) => `Created ${d}`,
+    resolved: 'Resolved',
+
+    addComment: '+ Add comment',
+    editExpiry: 'Change expiry date',
+    gotoTitle: 'Move the view to this comment',
+    deleteCommentTitle: 'Delete this comment',
+    delete: 'Delete',
+    deleteArmed: (n) => (n ? `Delete + ${n} comment${n === 1 ? '' : 's'}?` : 'Delete?'),
+
+    formNew: 'New comment group',
+    formEdit: 'Change expiry date',
+    label: 'Title',
+    color: 'Color',
+    removeOn: 'Remove comments on',
+    commentTextLabel: 'Comment text',
+    idNote: "The id lets the plugin find this comment again if its pin is moved.",
+    cancel: 'Cancel',
+    saveEntry: 'Save',
+    createEntry: 'Create group',
+    errLabel: 'Give the group a title.',
+    errColor: 'Color must be a 6-digit hex value.',
+    errDate: 'Pick a removal date after today, or choose Indefinite.',
+    defaultLabel: (md) => `${md} update`,
+
+    setup: 'Setup',
+    setupIntro: 'Comments are posted through Figma’s REST API, which needs a personal access token. Create one in Figma → Settings → Security → Personal access tokens, with <b>file_comments</b> set to read + write. It is stored on this computer only.',
+    token: 'Personal access token',
+    file: 'File',
+    filePlaceholder: "Paste this file's link",
+    fileHint: "Paste the file's link from Figma's Share dialog.",
+    back: 'Back',
+    loading: 'Loading…',
+    connect: 'Connect',
+    errToken: 'Paste a personal access token.',
+    errFile: "That doesn't look like a Figma file link.",
+
+    busySync: 'Syncing comments',
+    busyRefresh: 'Refreshing',
+    busyPost: 'Posting comment',
+    busyDeleteOne: 'Deleting comment',
+    busyDeleteMany: 'Deleting comments',
+    busyLocate: 'Locating comment',
+    busyCheck: 'Checking',
+
+    postedToast: 'Comment posted',
+    deletedToast: 'Comment deleted',
+    goneToast: 'That comment no longer exists in Figma',
+    releasedToast: (n) => `${n} edited comment${n === 1 ? '' : 's'} released — no longer tracked or deleted by the plugin`,
+    sweptToast: (groups, comments) => `${groups} expired group${groups === 1 ? '' : 's'} cleared · ${comments} comment${comments === 1 ? '' : 's'} deleted`,
+    failedToast: (n) => `${n} comment${n === 1 ? '' : 's'} couldn't be deleted (posted by another account)`,
+
+    errOffline: "Couldn't reach api.figma.com. Check your internet connection.",
+    err403: 'Token rejected. It needs file_comments read + write, and access to this file.',
+    err404: 'Not found. The comment or file may be gone.',
+    err429: 'Figma is rate limiting the plugin. Wait a moment and press sync.',
+  },
+
+  ko: {
+    entries: '코멘트 모음',
+    comments: '코멘트',
+    newEntry: '+ 코멘트 모음 추가',
+    settings: 'Token 및 파일 설정',
+    syncTitle: '동기화 및 만료된 코멘트 삭제',
+    foot: '플러그인은 백그라운드에서 실행되지 않습니다. 만료된 코멘트는 만료일 이후 플러그인을 다시 열 때 삭제됩니다.',
+
+    noEntriesTitle: '코멘트 모음이 없습니다',
+    noEntriesBody: '변경 사항 묶음을 코멘트 모음으로 만든 뒤, 수정한 부분에 색상별 코멘트를 남기세요.',
+    noCommentsTitle: '코멘트가 없습니다',
+    noCommentsBody: '코멘트 모음을 열고 수정한 위치를 화면 가운데에 둔 뒤 “코멘트 추가”를 누르세요.',
+    noCommentsHint: '아직 코멘트가 없습니다.',
+
+    leftovers: (n) => `이 플러그인이 남긴 코멘트 ${n}개가 어느 코멘트 모음에도 속해 있지 않습니다.`,
+    remove: '삭제',
+    retry: '다시 시도',
+
+    commentCount: (n) => `코멘트 ${n}개`,
+    until: (d) => `${d}까지`,
+    daysLeft: (n) => ` · ${n}일 남음`,
+    indefinite: '무기한',
+    createdOn: (d) => `${d} 생성`,
+    resolved: '해결됨',
+
+    addComment: '+ 코멘트 추가',
+    editExpiry: '코멘트 표출 기한 수정',
+    gotoTitle: '이 코멘트 위치로 이동',
+    deleteCommentTitle: '이 코멘트 삭제',
+    delete: '삭제',
+    deleteArmed: (n) => (n ? `코멘트 모음과 코멘트 ${n}개를 삭제할까요?` : '삭제할까요?'),
+
+    formNew: '새 코멘트 모음',
+    formEdit: '코멘트 표출 기한 수정',
+    label: '제목',
+    color: '색상',
+    removeOn: '코멘트 삭제일',
+    commentTextLabel: '코멘트 내용',
+    idNote: '변경 ID 덕분에 핀을 옮겨도 플러그인이 같은 코멘트를 찾을 수 있습니다.',
+    cancel: '취소',
+    saveEntry: '저장',
+    createEntry: '코멘트 모음 만들기',
+    errLabel: '코멘트 모음 제목을 입력하세요.',
+    errColor: '색상은 6자리 hex 값이어야 합니다.',
+    errDate: '오늘 이후의 삭제일을 고르거나 무기한을 선택하세요.',
+    defaultLabel: (md) => `${md} 변경사항`,
+
+    setup: '설정',
+    setupIntro: '코멘트는 Figma REST API로 등록되며 개인 액세스 token이 필요합니다. Figma → Settings → Security → Personal access tokens에서 <b>file_comments</b> 읽기 + 쓰기 권한으로 발급하세요. token은 이 컴퓨터에만 저장됩니다.',
+    token: '개인 액세스 token',
+    file: '파일',
+    filePlaceholder: '이 파일의 링크를 붙여넣으세요',
+    fileHint: 'Figma 공유 창에서 파일 링크를 복사해 붙여넣으세요.',
+    back: '뒤로',
+    loading: '불러오는 중…',
+    connect: '연결',
+    errToken: '개인 액세스 token을 입력하세요.',
+    errFile: 'Figma 파일 링크 형식이 아닙니다.',
+
+    busySync: '코멘트 동기화 중',
+    busyRefresh: '새로고침 중',
+    busyPost: '코멘트 등록 중',
+    busyDeleteOne: '코멘트 삭제 중',
+    busyDeleteMany: '코멘트 삭제 중',
+    busyLocate: '코멘트 위치 찾는 중',
+    busyCheck: '확인 중',
+
+    postedToast: '코멘트를 등록했습니다',
+    deletedToast: '코멘트를 삭제했습니다',
+    goneToast: 'Figma에 해당 코멘트가 더 이상 없습니다',
+    releasedToast: (n) => `내용이 수정된 코멘트 ${n}개의 연결을 해제했습니다. 더 이상 추적하거나 삭제하지 않습니다`,
+    sweptToast: (entries, comments) => `만료된 코멘트 모음 ${entries}개 정리 · 코멘트 ${comments}개 삭제`,
+    failedToast: (n) => `코멘트 ${n}개를 삭제하지 못했습니다 (다른 계정이 등록한 코멘트)`,
+
+    errOffline: 'api.figma.com에 연결하지 못했습니다. 인터넷 연결을 확인하세요.',
+    err403: 'Token이 거부되었습니다. file_comments 읽기 + 쓰기 권한과 이 파일에 대한 접근 권한이 필요합니다.',
+    err404: '찾을 수 없습니다. 코멘트나 파일이 삭제되었을 수 있습니다.',
+    err429: 'Figma가 요청을 제한하고 있습니다. 잠시 후 동기화를 눌러 주세요.',
+  },
+};
+
+function t(key, ...vars) {
+  const table = STRINGS[S.lang] || STRINGS.en;
+  const value = key in table ? table[key] : STRINGS.en[key];
+  if (value === undefined) return key;
+  return typeof value === 'function' ? value(...vars) : value;
+}
+
+// Change Marker — plugin UI (iframe).
+// Owns the entry list and all REST calls; the sandbox (code.js) persists data,
+// resolves where a comment should be pinned, and moves the view to a pin.
+
+// Entry colors. Comments can't be colored, so each color also maps to a square
+// emoji that starts the comment text — that's the color coding developers see.
+const PALETTE = [
+  { hex: '#F24822', emoji: '🟥' },
+  { hex: '#FF8A00', emoji: '🟧' },
+  { hex: '#FFC700', emoji: '🟨' },
+  { hex: '#14AE5C', emoji: '🟩' },
+  { hex: '#0D99FF', emoji: '🟦' },
+  { hex: '#9747FF', emoji: '🟪' },
+  { hex: '#8B5E3C', emoji: '🟫' },
+  { hex: '#333333', emoji: '⬛' },
+];
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+// Every comment ends with its id: "🟥 9.21 변경사항 · 변경 ID: 13ctm0".
+// Figma replaces a comment (new id of its own) when its pin is dragged and the
+// text carries over, so this is what re-links a row to it. The older labels are
+// what earlier versions wrote.
+const TAG_RE = /(?:변경 ID:\s*|Change ID:\s*|주석 ID:\s*|#)([a-z0-9]{6})\s*$/;
+const LEGACY_MARK = '다음 날짜까지 해당 주석 표시:';
+
+const S = {
+  view: 'list',          // 'setup' | 'list' | 'detail' | 'form'
+  tab: 'entries',        // list view tab: 'entries' | 'comments'
+  lang: 'ko',            // 'ko' | 'en'
+  entries: [],           // { id, label, color, createdAt, expiresAt, comments: [] }
+  today: '',
+  token: '',
+  fileKey: '',
+  leftovers: [],         // ids of our comments that belong to no group
+  released: 0,           // comments dropped by the last sync because they were edited
+  activeId: null,
+  form: null,
+  setup: null,
+  armedDelete: false,
+  busy: '',              // translated label of the request in flight, '' when idle
+  error: '',
+};
+
+const GEAR = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+  stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  <circle cx="12" cy="12" r="3"/>
+  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>
+</svg>`;
+
+const app = document.getElementById('app');
+const send = (type, data) => parent.postMessage({ pluginMessage: { type, ...data } }, '*');
+const toast = (text, error) => send('notify', { text, error });
+const save = () => send('save', { entries: S.entries });
+
+// Request/response with the sandbox, so a comment is pinned where the view is
+// at the moment of posting rather than at the last poll.
+let rid = 0;
+const pending = new Map();
+function ask(type) {
+  const id = ++rid;
+  return new Promise((resolve) => {
+    pending.set(id, resolve);
+    send(type, { rid: id });
+  });
+}
+
+// ------------------------------------------------------------------ utils --
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function parseISO(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+function toISO(date) {
+  const p = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}`;
+}
+
+function addDays(iso, n) {
+  const d = parseISO(iso);
+  d.setDate(d.getDate() + n);
+  return toISO(d);
+}
+
+function daysBetween(a, b) {
+  return Math.round((parseISO(b) - parseISO(a)) / 86400000);
+}
+
+// "Sep 21" / "9월 21일", with the year when it isn't this one.
+function fmtDate(iso) {
+  const d = parseISO(iso);
+  const sameYear = iso.slice(0, 4) === S.today.slice(0, 4);
+  if (S.lang === 'ko') {
+    const s = `${d.getMonth() + 1}월 ${d.getDate()}일`;
+    return sameYear ? s : `${d.getFullYear()}년 ${s}`;
+  }
+  const s = `${MONTHS[d.getMonth()]} ${d.getDate()}`;
+  return sameYear ? s : `${s}, ${d.getFullYear()}`;
+}
+
+function fmtStamp(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${fmtDate(toISO(d))}, ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+function normHex(v) {
+  const h = v.trim().replace(/^#/, '');
+  return /^[0-9a-f]{6}$/i.test(h) ? '#' + h.toUpperCase() : null;
+}
+
+function swatch(color, cls = '') {
+  return `<span class="esw ${cls}" style="color:${color};border-color:${color}"></span>`;
+}
+
+const emojiFor = (hex) => (PALETTE.find((p) => p.hex === hex) || PALETTE[7]).emoji;
+const isExpired = (e) => e.expiresAt !== null && e.expiresAt <= S.today;
+const active = () => S.entries.find((e) => e.id === S.activeId);
+const allComments = () => S.entries.flatMap((e) => e.comments.map((c) => ({ ...c, entryId: e.id })));
+const errText = (err) => (err && err.code ? t(err.code) : (err && err.message) || String(err));
+
+// What the plugin writes into the comment. `uid` is the comment's id; '…'
+// stands in for it in the previews.
+function commentText(entry, uid) {
+  const label = S.lang === 'ko' ? '변경 ID:' : 'Change ID:';
+  return `${emojiFor(entry.color)} ${entry.label} · ${label} ${uid || '000000'}`;
+}
+
+const tagOf = (message) => {
+  const m = typeof message === 'string' && message.match(TAG_RE);
+  return m ? m[1] : null;
+};
+
+// An untouched plugin comment: one line ending in an id, or one of the older
+// formats. An edited comment stops matching, which is what releases it.
+const OURS_RE = /^\S+ .+ · (?:변경 ID:|Change ID:|주석 ID:) [a-z0-9]{6}$/;
+const isOurComment = (c) =>
+  !c.parent_id && typeof c.message === 'string' &&
+  (OURS_RE.test(c.message.trim()) || c.message.includes(LEGACY_MARK));
+
+// Short, and unique among the ids already in use in this file.
+function newUid() {
+  const used = new Set(allComments().map((c) => c.uid));
+  for (;;) {
+    const uid = Math.random().toString(36).slice(2, 8).padEnd(6, '0');
+    if (!used.has(uid)) return uid;
+  }
+}
+
+function expiryBadge(e) {
+  if (e.expiresAt === null) return `<span class="badge">${t('indefinite')}</span>`;
+  const left = daysBetween(S.today, e.expiresAt);
+  const soon = left <= 3 ? ' soon' : '';
+  const tail = left <= 3 ? t('daysLeft', left) : '';
+  return `<span class="badge${soon}">${t('until', fmtDate(e.expiresAt))}${tail}</span>`;
+}
+
+function sortedComments(list) {
+  return [...list].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+}
+
+// One comment in a log. Clicking it moves the view to the comment's pin;
+// the ✕ deletes that one comment.
+function commentRow(c, showEntry) {
+  const e = S.entries.find((x) => x.id === c.entryId);
+  const where = c.target && c.target !== 'Canvas' ? `${c.page} › ${c.target}` : c.page;
+  const sub = [showEntry && e.label, c.author, where].filter(Boolean).join(' · ');
+  return `
+    <div class="trow mrow" data-act="goto" data-id="${c.uid || c.id}" title="${t('gotoTitle')}">
+      ${swatch(e.color)}
+      <div class="mcol">
+        <div class="tname mono">${esc(c.uid || '—')}${c.resolved ? ` <span class="badge">${t('resolved')}</span>` : ''}</div>
+        <div class="msub">${esc(sub)}</div>
+      </div>
+      <span class="tsub">${fmtStamp(c.createdAt)}</span>
+      <button class="xs tmain danger" data-act="delComment" data-id="${c.uid || c.id}" title="${t('deleteCommentTitle')}">✕</button>
+    </div>`;
+}
+
+function langToggle() {
+  const btn = (id, label) => `<button class="lang-btn${S.lang === id ? ' active' : ''}" data-act="lang" data-lang="${id}">${label}</button>`;
+  return `<div class="lang-toggle">${btn('ko', '한국어')}${btn('en', 'EN')}</div>`;
+}
+
+// ------------------------------------------------------------------ views --
+
+function viewSetup() {
+  const f = S.setup;
+  const connected = S.token && S.fileKey;
+  return `
+    <div class="navbar">
+      ${connected ? `<button class="navbtn" data-act="back" title="${t('back')}">←</button>` : ''}
+      <div class="trail">${t('setup')}</div>
+      ${langToggle()}
+    </div>
+    <main><div class="tabbody">
+      <div class="muted" style="font-size:11px;line-height:1.5;margin-bottom:14px">${t('setupIntro')}</div>
+      <div class="form-row">
+        <div class="lbl">${t('token')}</div>
+        <input class="wide" id="s-token" type="password" value="${esc(f.token)}" placeholder="figd_…" />
+      </div>
+      <div class="form-row">
+        <div class="lbl">${t('file')}</div>
+        <input class="wide" id="s-file" value="${esc(f.fileKey)}" placeholder="${t('filePlaceholder')}" />
+        <div class="muted" style="font-size:11px;margin-top:4px">${t('fileHint')}</div>
+      </div>
+      ${f.error ? `<div class="field-err" style="margin-bottom:10px">${esc(f.error)}</div>` : ''}
+      <div class="head-actions">
+        ${connected ? `<button data-act="back">${t('cancel')}</button>` : ''}
+        <button class="primary" data-act="saveSetup"${S.busy ? ' disabled' : ''}>${t('connect')}</button>
+      </div>
+    </div></main>`;
+}
+
+function viewList() {
+  const notices = [
+    S.error ? `<div class="notice err"><span>${esc(S.error)}</span><button class="xs" data-act="refresh">${t('retry')}</button></div>` : '',
+    S.leftovers.length
+      ? `<div class="notice"><span>${t('leftovers', S.leftovers.length)}</span>
+           <button class="xs" data-act="removeLeftovers">${t('remove')}</button></div>`
+      : '',
+  ].join('');
+
+  const entryCards = S.entries.length
+    ? S.entries.map((e) => `
+        <div class="card clickable" data-act="open" data-id="${e.id}">
+          <div class="card-head">
+            ${swatch(e.color)}
+            <div class="ch-name">${esc(e.label)}</div>
+            <div class="ch-sub">${t('commentCount', e.comments.length)}</div>
+          </div>
+          <div class="card-meta">${expiryBadge(e)}</div>
+        </div>`).join('')
+    : `<div class="empty">
+         <div class="empty-t">${t('noEntriesTitle')}</div>
+         ${t('noEntriesBody')}
+       </div>`;
+
+  const log = allComments().length
+    ? sortedComments(allComments()).map((c) => commentRow(c, true)).join('')
+    : `<div class="empty">
+         <div class="empty-t">${t('noCommentsTitle')}</div>
+         ${t('noCommentsBody')}
+       </div>`;
+
+  const tab = (id, label, n) =>
+    `<button class="tab${S.tab === id ? ' active' : ''}" data-act="tab" data-tab="${id}">${label} <span class="tb">${n}</span></button>`;
+
+  return `
+    <header class="has-tabs">
+      <div class="hrow">
+        <div class="hactions">
+          <button class="ghost sm icon-btn" data-act="setup" title="${t('settings')}">${GEAR}</button>
+          <button class="ghost sm" data-act="refresh" title="${t('syncTitle')}"${S.busy ? ' disabled' : ''}>↻</button>
+          <button class="primary sm" data-act="new">${t('newEntry')}</button>
+          ${langToggle()}
+        </div>
+      </div>
+      <div class="tabs">${tab('entries', t('entries'), S.entries.length)}${tab('comments', t('comments'), allComments().length)}</div>
+    </header>
+    <main><div class="tabbody">${notices}${S.tab === 'entries' ? entryCards : log}</div></main>
+    <div class="foot">${t('foot')}</div>`;
+}
+
+function viewDetail() {
+  const e = active();
+  const mine = sortedComments(e.comments.map((c) => ({ ...c, entryId: e.id })));
+  const del = S.armedDelete
+    ? `<button class="danger armed" data-act="delete">${t('deleteArmed', e.comments.length)}</button>`
+    : `<button class="danger" data-act="delete">${t('delete')}</button>`;
+
+  return `
+    <div class="navbar">
+      <button class="navbtn" data-act="back" title="${t('back')}">←</button>
+      <div class="trail">${esc(e.label)}</div>
+      ${langToggle()}
+    </div>
+    <main><div class="tabbody">
+      <div class="var-head">
+        <div style="display:flex;align-items:center;gap:8px">${swatch(e.color, 'lg')}<div class="leaf">${esc(e.label)}</div></div>
+        <div class="badges">
+          ${expiryBadge(e)}
+          <span class="badge">${t('commentCount', e.comments.length)}</span>
+          <span class="badge">${t('createdOn', fmtDate(e.createdAt))}</span>
+        </div>
+      </div>
+      <div class="preview">${esc(commentText(e))}</div>
+      <div class="detail-actions top">
+        <button data-act="edit">${t('editExpiry')}</button>
+        ${del}
+      </div>
+      <button class="primary full big-add" data-act="add"${S.busy ? ' disabled' : ''}>${t('addComment')}</button>
+      <div class="list-head"><span>${t('comments')} <span class="sc">${e.comments.length}</span></span></div>
+      ${mine.length
+        ? mine.map((c) => commentRow(c, false)).join('')
+        : `<div class="muted" style="font-size:11px">${t('noCommentsHint')}</div>`}
+    </div></main>`;
+}
+
+function viewForm() {
+  const f = S.form;
+  const palette = PALETTE.map((c) => `
+    <button class="pal${c.hex === f.color ? ' picked' : ''}" data-act="pick" data-color="${c.hex}" title="${c.hex}">${swatch(c.hex)}</button>`).join('');
+  const preview = commentText({ color: normHex(f.color) || '#333333', label: f.label || '…' });
+
+  return `
+    <div class="navbar">
+      <button class="navbtn" data-act="cancel" title="${t('cancel')}">←</button>
+      <div class="trail">${f.id ? t('formEdit') : t('formNew')}</div>
+      ${langToggle()}
+    </div>
+    <main><div class="tabbody">
+      ${f.id ? '' : `
+      <div class="form-row">
+        <div class="lbl">${t('label')}</div>
+        <input class="wide" id="f-label" value="${esc(f.label)}" />
+      </div>
+      <div class="form-row">
+        <div class="lbl">${t('color')}</div>
+        <div class="palette">${palette}</div>
+        <div class="hex-row">
+          <span id="f-prev">${swatch(f.color)}</span>
+          <input class="wide" id="f-hex" value="${f.color}" maxlength="7" />
+        </div>
+      </div>`}
+      <div class="form-row">
+        <div class="lbl">${t('removeOn')}</div>
+        <div class="date-row">
+          <input class="wide" type="date" id="f-date" value="${f.expiresAt}" min="${addDays(S.today, 1)}"${f.indefinite ? ' disabled' : ''} />
+          <div class="hcheck${f.indefinite ? ' on' : ''}" data-act="indef"><span class="box">${f.indefinite ? '✓' : ''}</span>${t('indefinite')}</div>
+        </div>
+      </div>
+      ${f.id ? '' : `
+      <div class="form-row">
+        <div class="lbl">${t('commentTextLabel')}</div>
+        <div class="preview" id="f-preview">${esc(preview)}</div>
+        <div class="muted" style="font-size:11px;margin-top:4px">${t('idNote')}</div>
+      </div>`}
+      ${f.error ? `<div class="field-err" style="margin-bottom:10px">${esc(f.error)}</div>` : ''}
+      <div class="head-actions">
+        <button data-act="cancel">${t('cancel')}</button>
+        <button class="primary" data-act="save">${f.id ? t('saveEntry') : t('createEntry')}</button>
+      </div>
+    </div></main>`;
+}
+
+// Keeps the comment preview in step with the title/color being typed, without
+// re-rendering the form (which would drop the caret).
+function updatePreview() {
+  const box = document.getElementById('f-preview');
+  if (!box || !S.form) return;
+  box.textContent = commentText({ color: normHex(S.form.color) || '#333333', label: S.form.label || '…' });
+}
+
+let lastKey = '';
+function render() {
+  if (S.view === 'detail' && !active()) S.view = 'list';
+  // Keep the scroll position when re-rendering the same screen.
+  const key = `${S.view}:${S.tab}:${S.activeId}`;
+  const prev = app.querySelector('.tabbody');
+  const scroll = prev && key === lastKey ? prev.scrollTop : 0;
+  app.innerHTML = S.view === 'setup' ? viewSetup()
+    : S.view === 'form' ? viewForm()
+    : S.view === 'detail' ? viewDetail()
+    : viewList();
+  const body = app.querySelector('.tabbody');
+  if (body) body.scrollTop = scroll;
+  if (S.busy) {
+    // The veil also swallows clicks, so nothing is fired twice mid-request.
+    app.innerHTML += `<div class="veil"></div><div class="veil-box"><span class="spin"></span>${esc(S.busy)}…</div>`;
+  }
+  lastKey = key;
+}
+
+// ------------------------------------------------------------------- sync --
+
+async function withBusy(label, fn) {
+  S.busy = label;
+  S.error = '';
+  render();
+  try {
+    await fn();
+  } catch (err) {
+    S.error = errText(err);
+    toast(S.error, true);
+  }
+  S.busy = '';
+  render();
+}
+
+// Re-read the file's comments and bring the entry list in line with them:
+// refresh each pin's position, flag resolved ones, drop deleted ones.
+//
+// Dragging a pin in Figma replaces the comment with a new one (new id), so a
+// tracked comment that vanished is re-linked to the identical comment that took
+// its place — same text, same id line.
+//
+// Editing a comment's text in Figma releases it: the plugin drops it from the
+// group and never touches it again, since it is no longer the comment it posted.
+async function pullComments() {
+  const comments = await api.listComments(S.token, S.fileKey);
+  const byId = new Map(comments.map((c) => [c.id, c]));
+  const tracked = new Set(S.entries.flatMap((e) => e.comments.map((c) => c.id)));
+  const spare = comments.filter((c) => isOurComment(c) && !tracked.has(c.id));
+  const released = [];
+
+  for (const e of S.entries) {
+    const kept = [];
+    for (const c of e.comments) {
+      const live = byId.get(c.id);
+      if (live) {
+        if (c.message && live.message !== c.message) {
+          released.push(live.id);                 // edited by hand: let it go
+          continue;
+        }
+        kept.push({ ...c, clientMeta: live.client_meta || c.clientMeta, resolved: !!live.resolved_at });
+        continue;
+      }
+      // The text must match exactly; the id line then tells identical comments
+      // of the same group apart.
+      const want = c.message || commentText(e, c.uid);
+      let i = spare.findIndex((s) => s.message === want && (!c.uid || tagOf(s.message) === c.uid));
+      if (i === -1 && !c.message) i = spare.findIndex((s) => tagOf(s.message) === c.uid);
+      if (i === -1) continue;                     // deleted, or edited and released
+      const moved = spare.splice(i, 1)[0];
+      kept.push({
+        ...c,
+        id: moved.id,
+        message: moved.message,
+        clientMeta: moved.client_meta || c.clientMeta,
+        resolved: !!moved.resolved_at,
+      });
+    }
+    e.comments = kept;
+  }
+
+  // A released comment belongs to the designer now: not a leftover either.
+  const releasedSet = new Set(released);
+  S.released = released.length;
+  S.leftovers = spare.filter((c) => !releasedSet.has(c.id)).map((c) => c.id);
+  return comments;
+}
+
+const findComment = (uid) => allComments().find((c) => (c.uid || c.id) === uid);
+
+// Reconcile with the file, and (with `expire`) delete the comments of entries
+// whose date has passed.
+async function sync({ expire }) {
+  if (!S.token || !S.fileKey) return;
+  await withBusy(expire ? t('busySync') : t('busyRefresh'), async () => {
+    await pullComments();
+
+    let removed = 0;
+    let failed = 0;
+    if (expire) {
+      const expired = S.entries.filter(isExpired);
+      for (const e of expired) {
+        for (const c of e.comments) {
+          try {
+            await api.deleteComment(S.token, S.fileKey, c.id);
+            removed++;
+          } catch (err) {
+            if (err.status === 404) removed++;    // already gone
+            else failed++;
+          }
+        }
+      }
+      if (expired.length) S.entries = S.entries.filter((e) => !isExpired(e));
+      if (removed) toast(t('sweptToast', expired.length, removed));
+      // A comment posted by someone else can't be deleted with this token.
+      if (failed) toast(t('failedToast', failed), true);
+    }
+    if (S.released) toast(t('releasedToast', S.released));
+
+    save();
+  });
+}
+
+// ---------------------------------------------------------------- actions --
+
+function openForm(entry) {
+  const used = new Set(S.entries.map((e) => e.color));
+  const md = `${Number(S.today.slice(5, 7))}.${S.today.slice(8)}`;
+  S.form = entry
+    ? { id: entry.id, label: entry.label, color: entry.color, expiresAt: entry.expiresAt || addDays(S.today, 14), indefinite: entry.expiresAt === null }
+    : {
+        id: null,
+        label: t('defaultLabel', md),
+        color: (PALETTE.find((c) => !used.has(c.hex)) || PALETTE[0]).hex,
+        expiresAt: addDays(S.today, 14),
+        indefinite: false,
+      };
+  S.view = 'form';
+  render();
+  const input = document.getElementById(entry ? 'f-date' : 'f-label');
+  if (input) {
+    input.focus();
+    if (!entry) input.select();
+  }
+}
+
+function saveForm() {
+  const f = S.form;
+  f.label = f.label.trim();
+  f.error = !f.indefinite && !(f.expiresAt > S.today) ? t('errDate')
+    : f.id ? null                               // title/color are fixed once posted
+    : !f.label ? t('errLabel')
+    : !normHex(f.color) ? t('errColor')
+    : null;
+  if (f.error) return render();
+
+  const expiresAt = f.indefinite ? null : f.expiresAt;
+  if (f.id) {
+    active().expiresAt = expiresAt;
+  } else {
+    const entry = { id: 'e-' + Date.now().toString(36), label: f.label, color: normHex(f.color), createdAt: S.today, expiresAt, comments: [] };
+    S.entries.push(entry);
+    S.activeId = entry.id;
+  }
+  S.view = 'detail';
+  S.form = null;
+  save();
+  render();
+}
+
+const actions = {
+  new: () => openForm(null),
+  refresh: () => sync({ expire: true }),
+  setup: () => { S.setup = { token: S.token, fileKey: S.fileKey, error: null }; S.view = 'setup'; render(); },
+  tab: (el) => { S.tab = el.dataset.tab; render(); },
+  open: (el) => { S.activeId = el.dataset.id; S.armedDelete = false; S.view = 'detail'; render(); },
+  back: () => { S.view = 'list'; S.armedDelete = false; S.setup = null; render(); },
+  edit: () => openForm(active()),
+  cancel: () => { S.view = S.form.id ? 'detail' : 'list'; S.form = null; render(); },
+  save: saveForm,
+  pick: (el) => { S.form.color = el.dataset.color; render(); },
+  indef: () => { S.form.indefinite = !S.form.indefinite; render(); },
+
+  lang: (el) => {
+    S.lang = el.dataset.lang;
+    send('setLang', { lang: S.lang });
+    render();
+  },
+
+  goto: (el) => {
+    const uid = el.dataset.id;
+    withBusy(t('busyLocate'), async () => {
+      await pullComments();     // a pin dragged since the last sync has moved
+      save();
+      const c = findComment(uid);
+      if (!c) return toast(t('goneToast'), true);
+      send('goto', { clientMeta: c.clientMeta });
+    });
+  },
+
+  add: () => {
+    const entry = active();
+    withBusy(t('busyPost'), async () => {
+      const p = await ask('placementNow');
+      const uid = newUid();
+      const posted = await api.postComment(S.token, S.fileKey, commentText(entry, uid), p.clientMeta);
+      entry.comments.push({
+        uid,
+        id: posted.id,
+        message: posted.message,
+        clientMeta: p.clientMeta,
+        target: p.target,
+        page: p.page,
+        author: (posted.user && posted.user.handle) || '',
+        createdAt: posted.created_at || new Date().toISOString(),
+        resolved: false,
+      });
+      save();
+      toast(t('postedToast'));
+    });
+  },
+
+  delComment: (el) => {
+    const uid = el.dataset.id;
+    withBusy(t('busyDeleteOne'), async () => {
+      await pullComments();     // picks up a new id if the pin was moved
+      const c = findComment(uid);
+      const entry = c && S.entries.find((e) => e.comments.some((x) => (x.uid || x.id) === uid));
+      if (!c || !entry) {
+        save();
+        return toast(t('goneToast'));
+      }
+      try {
+        await api.deleteComment(S.token, S.fileKey, c.id);
+      } catch (err) {
+        if (err.status !== 404) throw err;        // 404 = already gone
+      }
+      entry.comments = entry.comments.filter((x) => (x.uid || x.id) !== uid);
+      save();
+      toast(t('deletedToast'));
+    });
+  },
+
+  delete: () => {
+    if (!S.armedDelete) { S.armedDelete = true; return render(); }
+    const entry = active();
+    S.armedDelete = false;
+    withBusy(t('busyDeleteMany'), async () => {
+      let failed = 0;
+      await pullComments();
+      for (const c of entry.comments) {
+        try {
+          await api.deleteComment(S.token, S.fileKey, c.id);
+        } catch (err) {
+          if (err.status !== 404) failed++;       // 404 = already gone
+        }
+      }
+      S.entries = S.entries.filter((e) => e.id !== entry.id);
+      S.view = 'list';
+      save();
+      if (failed) toast(t('failedToast', failed), true);
+    });
+  },
+
+  removeLeftovers: () => {
+    withBusy(t('busyDeleteMany'), async () => {
+      for (const id of S.leftovers) {
+        try {
+          await api.deleteComment(S.token, S.fileKey, id);
+        } catch (err) { /* reported by the sync that follows */ }
+      }
+      S.leftovers = [];
+    }).then(() => sync({ expire: false }));
+  },
+
+  saveSetup: () => {
+    const f = S.setup;
+    const token = f.token.trim();
+    const fileKey = parseFileKey(f.fileKey || '');
+    f.error = !token ? t('errToken') : !fileKey ? t('errFile') : null;
+    if (f.error) return render();
+    withBusy(t('busyCheck'), async () => {
+      await api.listComments(token, fileKey);   // fails loudly if token/file is wrong
+      S.token = token;
+      S.fileKey = fileKey;
+      send('saveToken', { token });
+      send('saveFileKey', { fileKey });
+      S.setup = null;
+      S.view = 'list';
+    }).then(() => {
+      if (S.error) { S.setup.error = S.error; S.error = ''; render(); }
+      else sync({ expire: true });
+    });
+  },
+};
+
+app.addEventListener('click', (ev) => {
+  const el = ev.target.closest('[data-act]');
+  if (!el || el.disabled) return;
+  if (S.armedDelete && el.dataset.act !== 'delete') S.armedDelete = false;
+  actions[el.dataset.act](el);
+});
+
+// Inputs update state without re-rendering, so focus/caret are kept.
+app.addEventListener('input', (ev) => {
+  const el = ev.target;
+  if (S.setup) {
+    if (el.id === 's-token') S.setup.token = el.value;
+    if (el.id === 's-file') S.setup.fileKey = el.value;
+    return;
+  }
+  if (!S.form) return;
+  if (el.id === 'f-label') {
+    S.form.label = el.value;
+    updatePreview();
+  }
+  if (el.id === 'f-date') S.form.expiresAt = el.value;
+  if (el.id === 'f-hex') {
+    S.form.color = el.value;
+    const hex = normHex(el.value);
+    el.classList.toggle('invalid', !hex);
+    if (hex) {
+      document.getElementById('f-prev').innerHTML = swatch(hex);
+      document.querySelectorAll('.pal').forEach((p) => p.classList.toggle('picked', p.dataset.color === hex));
+      updatePreview();
+    }
+  }
+});
+
+document.addEventListener('keydown', (ev) => {
+  if (S.view === 'form' && ev.key === 'Enter' && ev.target.tagName === 'INPUT') saveForm();
+  else if (S.view === 'setup' && ev.key === 'Enter' && ev.target.tagName === 'INPUT') actions.saveSetup();
+  else if (ev.key === 'Escape' && S.view !== 'list' && S.token) actions[S.view === 'form' ? 'cancel' : 'back']();
+});
+
+// --------------------------------------------------------------- messages --
+
+onmessage = (ev) => {
+  const msg = ev.data.pluginMessage;
+  if (!msg) return;
+  if (msg.type === 'init') {
+    Object.assign(S, {
+      entries: (msg.entries || []).map((e) => ({ ...e, comments: e.comments || [] })),
+      today: msg.today,
+      token: msg.token,
+      fileKey: msg.fileKey,
+      lang: msg.lang || 'ko',
+    });
+    if (!S.token || !S.fileKey) {
+      S.setup = { token: S.token, fileKey: S.fileKey, error: null };
+      S.view = 'setup';
+      render();
+    } else {
+      render();
+      sync({ expire: true });
+    }
+    return;
+  }
+  if (msg.type === 'placementNow') {
+    const resolve = pending.get(msg.rid);
+    if (resolve) { pending.delete(msg.rid); resolve(msg.placement); }
+    return;
+  }
+  if (S.view !== 'form' && S.view !== 'setup') render();   // never clobber a form
+};
+
+app.innerHTML = `<div class="center-msg">${t('loading')}</div>`;
+send('init');
+
+</script>
+</body>
+</html>

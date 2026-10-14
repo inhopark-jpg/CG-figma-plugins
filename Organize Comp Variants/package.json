@@ -1,0 +1,17 @@
+{
+  "name": "organize-comp-variants",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Lays out a component set's variants on a grid and labels each axis with bracket instances",
+  "scripts": {
+    "build": "esbuild src/code.ts --bundle --target=es2017 --outfile=dist/code.js",
+    "watch": "npm run build -- --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test test/layout.test.mjs"
+  },
+  "devDependencies": {
+    "@figma/plugin-typings": "*",
+    "esbuild": "*",
+    "typescript": "*"
+  }
+}

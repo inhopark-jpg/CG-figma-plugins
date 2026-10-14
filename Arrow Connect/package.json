@@ -1,0 +1,16 @@
+{
+  "name": "arrow-connect",
+  "version": "0.1.0",
+  "private": true,
+  "description": "FigJam-style connector arrows for Figma Design files",
+  "scripts": {
+    "build": "esbuild src/code.ts --bundle --target=es2017 --outfile=dist/code.js",
+    "watch": "npm run build -- --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@figma/plugin-typings": "*",
+    "esbuild": "*",
+    "typescript": "*"
+  }
+}

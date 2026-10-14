@@ -1,0 +1,77 @@
+/* Change Marker — plugin-specific styles.
+   Only what the design system doesn't already cover. Colors come from
+   tokens.css; the only literal colors are entry colors, set inline from data.
+   Shared pieces (inputs, .notice, .spin, .foot, button.danger) live in
+   doc/design-system/components.css. */
+
+input.wide { width: 100%; }
+.field-err { margin-top: 4px; }
+
+/* entry color swatch — larger than .sw, shows the marker's look (border + tint) */
+.esw {
+  width: 14px; height: 14px; border-radius: 3px; border: 2px solid; flex-shrink: 0;
+  position: relative; overflow: hidden;
+}
+.esw::after { content: ""; position: absolute; inset: 0; background: currentColor; opacity: .15; }
+.esw.lg { width: 20px; height: 20px; border-radius: 4px; }
+
+/* preset palette */
+.palette { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; }
+.pal {
+  aspect-ratio: 1; padding: 0; border-radius: 5px; border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+}
+.pal:hover:not(:disabled) { background: var(--bg-hover); }
+.pal.picked { border-color: var(--brand) !important; }
+.hex-row { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+.hex-row .esw { width: 26px; height: 26px; border-radius: 5px; }
+.hex-row input { font-family: var(--mono); }
+
+.card .card-meta { display: flex; align-items: center; gap: 4px; margin-top: 6px; padding-left: 20px; }
+.badge.soon { color: var(--red); border-color: var(--red); }
+
+.form-row { margin-bottom: 14px; }
+.form-row > .lbl { color: var(--text-2); font-size: 11px; font-weight: 500; margin-bottom: 6px; }
+.date-row { display: flex; align-items: center; gap: 8px; }
+.date-row input { flex: 1; min-width: 0; }
+
+.big-add { padding: 10px 12px; margin-top: 12px; }
+.detail-actions { display: flex; gap: 6px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
+.detail-actions button { flex: 1; }
+button.danger.armed { background: var(--red-bg); border-color: var(--red); }
+
+/* list header with tabs directly under the title row */
+header.has-tabs { padding-bottom: 0; border-bottom: none; }
+
+/* marker log rows (built on .trow) */
+.mrow { margin: 0 -6px; }
+.mrow .mcol { flex: 1; min-width: 0; }
+.mrow .tname { display: block; }
+.msub {
+  color: var(--text-2); font-size: 11px; margin-top: 1px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.list-head {
+  display: flex; align-items: center; justify-content: space-between;
+  font-weight: 600; margin: 18px 0 4px;
+}
+.list-head .sc { color: var(--text-2); font-weight: 400; margin-left: 2px; }
+
+/* comment text preview, exactly as it will be posted */
+.preview {
+  font-family: var(--mono); font-size: 11px; line-height: 1.5;
+  background: var(--bg-2); border: 1px solid var(--border); border-radius: 6px;
+  padding: 7px 9px; white-space: pre-wrap; word-break: break-word;
+}
+
+/* busy state: dim the panel and show a spinner, so a slow API call doesn't
+   read as a frozen plugin */
+.veil { position: fixed; inset: 0; background: var(--bg); opacity: .6; z-index: 50; }
+.veil-box {
+  position: fixed; inset: 0; z-index: 51;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  font-weight: 500; color: var(--text); pointer-events: none;
+}
+/* entry actions sit above the primary action, so they read as "this entry" */
+.detail-actions.top { margin-top: 12px; padding-top: 0; border-top: none; }
+.detail-actions.top button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; }

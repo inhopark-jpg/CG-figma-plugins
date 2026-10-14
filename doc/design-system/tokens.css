@@ -1,0 +1,94 @@
+/* =========================================================================
+   Figma Plugins — Shared Design Tokens
+   Source of truth: doc/design-system/. Synced into each plugin by
+   `node scripts/sync-ds.mjs` (see doc/design-system/README.md).
+   =========================================================================
+   Foundation layer: colors, type, resets. Load this before components.css.
+
+   These are Figma plugin UI tokens: every color variable maps to a
+   `--figma-color-*` CSS variable that the Figma desktop app injects at
+   runtime (so the UI auto-matches the user's light/dark theme), with a
+   static fallback for contexts where that variable isn't defined (e.g.
+   previewing this file outside a Figma plugin iframe).
+
+   If you're building a plain web app (not a Figma plugin), just drop the
+   var(--figma-color-*, ...) wrapper and keep the fallback hex as the value.
+   ========================================================================= */
+
+:root {
+  /* ---- color: surfaces ---- */
+  --bg:        var(--figma-color-bg, #fff);              /* page / panel background */
+  --bg-2:      var(--figma-color-bg-secondary, #f5f5f5);  /* recessed surface: headers, code blocks, field backgrounds */
+  --bg-hover:  var(--figma-color-bg-hover, #f0f0f0);      /* hover state for rows, buttons, tabs */
+  --bg-sel:    var(--figma-color-bg-selected, #e5f0ff);   /* selected / active row background */
+
+  /* ---- color: borders & text ---- */
+  --border:    var(--figma-color-border, #e6e6e6);
+  --text:      var(--figma-color-text, #1a1a1a);          /* primary text */
+  --text-2:    var(--figma-color-text-secondary, #888);   /* secondary / muted text, labels, hints */
+  --text-3:    var(--figma-color-text-tertiary, #b3b3b3); /* faint text: prefixes, placeholders, chevrons */
+  --bg-3:      var(--figma-color-bg-tertiary, #e9e9e9);   /* pills, switch track, scrollbar thumb */
+
+  /* ---- color: brand & semantic ---- */
+  --brand:      var(--figma-color-bg-brand, #0d99ff);     /* primary action, active states, focus accents */
+  --brand-text: var(--figma-color-text-onbrand, #fff);    /* text/icon color on top of --brand */
+  --text-brand: var(--figma-color-text-brand, #007be5);   /* brand-colored text on a normal surface (links, aliases) */
+  --red:        var(--figma-color-text-danger, #f24822);  /* error text */
+  /* Status surfaces are mixed from the text color rather than taken from Figma's
+     bg-*-secondary tokens, which are solid fills in the dark theme. */
+  --red-bg:     color-mix(in srgb, var(--red) 12%, var(--bg));   /* error surface (tint) */
+  --red-solid:  var(--figma-color-bg-danger, #f24822);     /* destructive fill (danger button, danger menu hover) */
+  --warn:       var(--figma-color-text-warning, #b86200);  /* warning text */
+  --warn-bg:    color-mix(in srgb, var(--warn) 14%, var(--bg));  /* warning surface (tint) */
+  --success:    var(--figma-color-icon-success, #14ae5c);  /* "live" / ok indicator dot */
+
+  /* ---- elevation (floating layers only: tooltip, menu, dialog) ---- */
+  --shadow-float: 0 8px 24px rgba(0, 0, 0, .3);
+  --scrim:        rgba(0, 0, 0, .35);
+
+  /* ---- typography ---- */
+  --font-ui:   Inter, -apple-system, system-ui, sans-serif;
+  --mono:      ui-monospace, Menlo, Consolas, monospace;
+
+  /* ---- type scale (used inline throughout components.css) ----
+     11px  – secondary/meta text (counts, hints, table sub-lines)
+     12px  – base body size (default on <html>)
+     13px  – panel title
+     Weights: 400 body, 500 buttons/tabs/labels, 600 emphasis/headings */
+}
+
+/* Two extra reference-only tokens some UI components below hard-code by hex
+   rather than a --figma-* variable, because they're Figma editor accent
+   colors (component purple, slot pink) rather than theme-adaptive tokens.
+   Keep them literal if you copy those components. */
+:root {
+  --figma-component-purple: #8a38f5;
+  --figma-slot-pink: #ff45c0;
+}
+
+* { box-sizing: border-box; }
+
+/* Native scrollbars render light-on-light in dark theme, so paint them from
+   theme tokens instead. color-scheme covers overlay scrollbars some
+   platforms draw; the webkit rules cover the rest. */
+html { color-scheme: light dark; }
+::-webkit-scrollbar { width: 11px; height: 11px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background-color: var(--figma-color-bg-tertiary, #c9c9cd);
+  border: 3px solid transparent;
+  border-radius: 6px;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover { background-color: var(--text-2); background-clip: padding-box; }
+
+/* Figma injects its theme <style> ahead of the plugin's HTML, so the page runs
+   in quirks mode, where tables don't inherit font size (they fall back to 16px). */
+table { font-size: inherit; }
+
+html, body {
+  margin: 0; padding: 0; height: 100%;
+  font-family: var(--font-ui);
+  font-size: 12px; color: var(--text); background: var(--bg);
+}

@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Figma Plugins — 공유 디자인 시스템</title>
+<link rel="stylesheet" href="tokens.css" />
+<link rel="stylesheet" href="components.css" />
+<style>
+  /* Page chrome for this reference doc only — not part of the design system itself. */
+  body { height: auto; min-height: 100vh; }
+  .showcase { max-width: 480px; margin: 0 auto; border-left: 1px solid var(--border); border-right: 1px solid var(--border); }
+  .swatch-row { display: flex; flex-wrap: wrap; gap: 10px; padding: 12px; }
+  .swatch { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 76px; }
+  .swatch .chip { width: 48px; height: 48px; border-radius: 8px; border: 1px solid var(--border); }
+  .swatch .lbl { font-size: 10px; color: var(--text-2); text-align: center; font-family: var(--mono); }
+  .group-label { font-weight: 600; font-size: 13px; padding: 14px 12px 4px; }
+  .row-gap { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding: 8px 12px; }
+</style>
+</head>
+<body>
+<div class="showcase">
+
+  <header>
+    <div class="hrow">
+      <div class="title">Dev Inspector</div>
+      <div class="hactions">
+        <button class="ghost sm">↻</button>
+        <div class="lang-toggle">
+          <button class="lang-btn active">한국어</button>
+          <button class="lang-btn">EN</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="navbar">
+    <button class="navbtn">←</button>
+    <div class="trail">Card / Header / Button</div>
+  </div>
+
+  <div class="group-label">Color tokens</div>
+  <div class="swatch-row">
+    <div class="swatch"><div class="chip" style="background:var(--bg)"></div><div class="lbl">--bg</div></div>
+    <div class="swatch"><div class="chip" style="background:var(--bg-2)"></div><div class="lbl">--bg-2</div></div>
+    <div class="swatch"><div class="chip" style="background:var(--bg-hover)"></div><div class="lbl">--bg-hover</div></div>
+    <div class="swatch"><div class="chip" style="background:var(--bg-sel)"></div><div class="lbl">--bg-sel</div></div>
+    <div class="swatch"><div class="chip" style="background:var(--brand)"></div><div class="lbl">--brand</div></div>
+    <div class="swatch"><div class="chip" style="background:var(--red)"></div><div class="lbl">--red</div></div>
+    <div class="swatch"><div class="chip" style="background:var(--text)"></div><div class="lbl">--text</div></div>
+    <div class="swatch"><div class="chip" style="background:var(--text-2)"></div><div class="lbl">--text-2</div></div>
+  </div>
+
+  <div class="group-label">Buttons</div>
+  <div class="row-gap">
+    <button>Default</button>
+    <button class="primary">Primary</button>
+    <button class="ghost">Ghost</button>
+    <button disabled>Disabled</button>
+    <button class="sm">Small</button>
+    <button class="xs">XS</button>
+  </div>
+
+  <div class="group-label">Tabs</div>
+  <div class="tabs">
+    <button class="tab active">Inspect</button>
+    <button class="tab">Language <span class="tb">3</span></button>
+    <button class="tab">Icons</button>
+    <button class="tab" disabled>Export</button>
+  </div>
+
+  <div class="group-label">Segmented control</div>
+  <div class="row-gap">
+    <div class="seg">
+      <button class="seg-btn active">px</button>
+      <button class="seg-btn">rem</button>
+    </div>
+  </div>
+
+  <div class="group-label">Section (collapsible)</div>
+  <div class="sec">
+    <div class="sec-head">
+      <span class="caret">▾</span>
+      <span>Layout</span>
+      <span class="sc">Auto layout</span>
+      <div class="sec-actions"><button class="xs">Collapse all</button></div>
+    </div>
+    <div class="sec-body">
+      <div class="prow">
+        <div class="pk">Direction</div>
+        <div class="pv">Horizontal <span class="tok">layout/direction</span></div>
+      </div>
+      <div class="prow">
+        <div class="pk">Gap</div>
+        <div class="pv mono">8 <span class="tok">spacing/sm</span></div>
+      </div>
+      <div class="prow flag">
+        <div class="pk">Wrap</div>
+        <div class="pv">Enabled</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="group-label">Cards & badges</div>
+  <div style="padding:0 12px 12px">
+    <div class="card own">
+      <div class="card-head">
+        <div class="ch-name">Button / Primary</div>
+        <div class="ch-sub">Component</div>
+      </div>
+    </div>
+    <div class="badges">
+      <span class="badge b-main">Main component</span>
+      <span class="badge">Instance</span>
+      <span class="tvariant">Variant</span>
+      <span class="tslot">In Slot</span>
+      <span class="text-badge">Text</span>
+    </div>
+  </div>
+
+  <div class="group-label">Tree row</div>
+  <div style="padding:0 12px 12px">
+    <div class="trow self">
+      <span class="tcaret">▾</span>
+      <span class="tname">Frame 1</span>
+      <span class="tcount">4</span>
+    </div>
+    <div class="tkids">
+      <div class="trow">
+        <span class="tcaret leaf">▾</span>
+        <span class="tname">Icon</span>
+        <span class="tsub">component</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="group-label">Form controls</div>
+  <div class="row-gap">
+    <select><option>PNG</option><option>SVG</option></select>
+    <input class="exp-num" value="2x" />
+    <div class="hcheck on"><span class="box">✓</span> Drop hidden layers</div>
+  </div>
+
+  <div class="group-label">Table</div>
+  <div style="padding:0 12px 12px">
+    <div class="tr-wrap">
+      <table class="tr-table">
+        <thead><tr><th class="tr-name">Token</th><th>EN</th><th>KO</th></tr></thead>
+        <tbody>
+          <tr><td class="tr-name">title</td><td>Dev Inspector</td><td>Dev Inspector</td></tr>
+          <tr><td class="tr-name">back</td><td>Back</td><td>뒤로</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="group-label">Inputs · field</div>
+  <div style="padding:8px 12px">
+    <div class="field"><label>이름</label><input type="text" placeholder="예: language" /></div>
+    <div class="field"><label>잘못된 값</label><input type="text" class="invalid" value="#zzz" /><div class="field-err">6자리 hex 값이어야 합니다.</div></div>
+    <textarea style="width:100%" placeholder="textarea"></textarea>
+  </div>
+
+  <div class="group-label">Buttons (semantic)</div>
+  <div class="row-gap">
+    <button class="primary">Primary</button><button>Default</button><button class="ghost">Ghost</button>
+    <button class="danger">Danger</button><button class="danger-fill">Danger fill</button>
+    <button class="selected" disabled>Selected</button><button class="sm">.sm</button><button class="xs">.xs</button>
+  </div>
+
+  <div class="group-label">Badges · notices</div>
+  <div class="row-gap">
+    <span class="badge">default</span><span class="badge warn">warn</span><span class="badge danger">danger</span><span class="badge link">link</span>
+  </div>
+  <div style="padding:0 12px">
+    <div class="notice"><span>기본 안내 (dashed)</span><button class="xs">동작</button></div>
+    <div class="notice info"><span>정보</span></div>
+    <div class="notice warn"><span>경고</span></div>
+    <div class="notice err"><span>오류</span><button class="xs">다시 시도</button></div>
+  </div>
+
+  <div class="group-label">Switch · spinner</div>
+  <div class="row-gap">
+    <input type="checkbox" class="switch" checked /> <input type="checkbox" class="switch" /> <span class="spin"></span>
+  </div>
+
+  <div class="group-label">Menu · dialog (static preview)</div>
+  <div class="row-gap" style="align-items:flex-start">
+    <div class="menu" style="position:static">
+      <input type="text" placeholder="검색…" />
+      <div class="menu-group">프리셋</div>
+      <div class="menu-item active"><span>preset-language</span><span class="meta">모드 2개</span></div>
+      <div class="menu-item"><span>preset-typeface</span></div>
+      <div class="menu-sep"></div>
+      <div class="menu-item danger"><span>삭제…</span></div>
+    </div>
+    <div class="dialog" style="max-width:220px">
+      <div>삭제할까요?</div>
+      <div class="dialog-actions"><button class="ghost">취소</button><button class="danger-fill">삭제</button></div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

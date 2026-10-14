@@ -1,0 +1,14 @@
+{
+  "name": "Arrow Connect",
+  "id": "arrow-connect-dev",
+  "api": "1.0.0",
+  "main": "dist/code.js",
+  "ui": "src/ui.html",
+  "editorType": ["figma"],
+  "documentAccess": "dynamic-page",
+  "networkAccess": { "allowedDomains": ["none"] },
+  "relaunchButtons": [
+    { "command": "open", "name": "Arrow Connect" },
+    { "command": "refresh", "name": "Refresh arrows" }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "ui-harness", "runtimeExecutable": "node", "runtimeArgs": ["/Users/park/Desktop/Figma Plugins/Config Manager/dev-harness/serve.mjs"], "port": 5178 }
+  ]
+}

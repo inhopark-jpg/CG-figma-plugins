@@ -1,0 +1,6 @@
+# dependencies and build output (each plugin: npm install && npm run build)
+node_modules/
+dist/
+
+# macOS
+.DS_Store

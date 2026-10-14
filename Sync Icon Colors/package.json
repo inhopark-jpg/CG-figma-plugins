@@ -1,0 +1,18 @@
+{
+  "name": "sync-icon-colors",
+  "version": "1.0.0",
+  "description": "Figma plugin that re-syncs fills/strokes inside icon-frame subtrees from a main component onto its instances.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "watch": "tsc -p tsconfig.json --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@figma/plugin-typings": "^1.135.0",
+    "typescript": "^7.0.2"
+  }
+}

@@ -1,0 +1,3549 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+/* @ds:begin — generated from doc/design-system. Edit there, then run `node scripts/sync-ds.mjs`. */
+/* =========================================================================
+   Figma Plugins — Shared Design Tokens
+   Source of truth: doc/design-system/. Synced into each plugin by
+   `node scripts/sync-ds.mjs` (see doc/design-system/README.md).
+   =========================================================================
+   Foundation layer: colors, type, resets. Load this before components.css.
+
+   These are Figma plugin UI tokens: every color variable maps to a
+   `--figma-color-*` CSS variable that the Figma desktop app injects at
+   runtime (so the UI auto-matches the user's light/dark theme), with a
+   static fallback for contexts where that variable isn't defined (e.g.
+   previewing this file outside a Figma plugin iframe).
+
+   If you're building a plain web app (not a Figma plugin), just drop the
+   var(--figma-color-*, ...) wrapper and keep the fallback hex as the value.
+   ========================================================================= */
+
+:root {
+  /* ---- color: surfaces ---- */
+  --bg:        var(--figma-color-bg, #fff);              /* page / panel background */
+  --bg-2:      var(--figma-color-bg-secondary, #f5f5f5);  /* recessed surface: headers, code blocks, field backgrounds */
+  --bg-hover:  var(--figma-color-bg-hover, #f0f0f0);      /* hover state for rows, buttons, tabs */
+  --bg-sel:    var(--figma-color-bg-selected, #e5f0ff);   /* selected / active row background */
+
+  /* ---- color: borders & text ---- */
+  --border:    var(--figma-color-border, #e6e6e6);
+  --text:      var(--figma-color-text, #1a1a1a);          /* primary text */
+  --text-2:    var(--figma-color-text-secondary, #888);   /* secondary / muted text, labels, hints */
+  --text-3:    var(--figma-color-text-tertiary, #b3b3b3); /* faint text: prefixes, placeholders, chevrons */
+  --bg-3:      var(--figma-color-bg-tertiary, #e9e9e9);   /* pills, switch track, scrollbar thumb */
+
+  /* ---- color: brand & semantic ---- */
+  --brand:      var(--figma-color-bg-brand, #0d99ff);     /* primary action, active states, focus accents */
+  --brand-text: var(--figma-color-text-onbrand, #fff);    /* text/icon color on top of --brand */
+  --text-brand: var(--figma-color-text-brand, #007be5);   /* brand-colored text on a normal surface (links, aliases) */
+  --red:        var(--figma-color-text-danger, #f24822);  /* error text */
+  /* Status surfaces are mixed from the text color rather than taken from Figma's
+     bg-*-secondary tokens, which are solid fills in the dark theme. */
+  --red-bg:     color-mix(in srgb, var(--red) 12%, var(--bg));   /* error surface (tint) */
+  --red-solid:  var(--figma-color-bg-danger, #f24822);     /* destructive fill (danger button, danger menu hover) */
+  --warn:       var(--figma-color-text-warning, #b86200);  /* warning text */
+  --warn-bg:    color-mix(in srgb, var(--warn) 14%, var(--bg));  /* warning surface (tint) */
+  --success:    var(--figma-color-icon-success, #14ae5c);  /* "live" / ok indicator dot */
+
+  /* ---- elevation (floating layers only: tooltip, menu, dialog) ---- */
+  --shadow-float: 0 8px 24px rgba(0, 0, 0, .3);
+  --scrim:        rgba(0, 0, 0, .35);
+
+  /* ---- typography ---- */
+  --font-ui:   Inter, -apple-system, system-ui, sans-serif;
+  --mono:      ui-monospace, Menlo, Consolas, monospace;
+
+  /* ---- type scale (used inline throughout components.css) ----
+     11px  – secondary/meta text (counts, hints, table sub-lines)
+     12px  – base body size (default on <html>)
+     13px  – panel title
+     Weights: 400 body, 500 buttons/tabs/labels, 600 emphasis/headings */
+}
+
+/* Two extra reference-only tokens some UI components below hard-code by hex
+   rather than a --figma-* variable, because they're Figma editor accent
+   colors (component purple, slot pink) rather than theme-adaptive tokens.
+   Keep them literal if you copy those components. */
+:root {
+  --figma-component-purple: #8a38f5;
+  --figma-slot-pink: #ff45c0;
+}
+
+* { box-sizing: border-box; }
+
+/* Native scrollbars render light-on-light in dark theme, so paint them from
+   theme tokens instead. color-scheme covers overlay scrollbars some
+   platforms draw; the webkit rules cover the rest. */
+html { color-scheme: light dark; }
+::-webkit-scrollbar { width: 11px; height: 11px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background-color: var(--figma-color-bg-tertiary, #c9c9cd);
+  border: 3px solid transparent;
+  border-radius: 6px;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover { background-color: var(--text-2); background-clip: padding-box; }
+
+/* Figma injects its theme <style> ahead of the plugin's HTML, so the page runs
+   in quirks mode, where tables don't inherit font size (they fall back to 16px). */
+table { font-size: inherit; }
+
+html, body {
+  margin: 0; padding: 0; height: 100%;
+  font-family: var(--font-ui);
+  font-size: 12px; color: var(--text); background: var(--bg);
+}
+
+/* =========================================================================
+   Figma Plugins — Shared Component Library
+   =========================================================================
+   Source of truth: doc/design-system/. Do not edit the copy inside a plugin's
+   ui.html (between the @ds markers) — edit here, then `node scripts/sync-ds.mjs`.
+   Load tokens.css first. Every color/spacing value here references a
+   variable from tokens.css — don't hard-code new hex values into a
+   component; add a token instead so both files stay themeable.
+
+   General conventions used throughout:
+   - Border radius: 4px (xs controls) / 5-6px (default) / 50% (circular icon buttons)
+   - Border: 1px solid var(--border) almost everywhere
+   - Font sizes: 11px (meta/secondary), 12px (body/default), 13px (title)
+   - Font weights: 400 (body), 500 (interactive labels), 600 (emphasis)
+   - Hover = var(--bg-hover) background swap, no color/shadow tricks
+   - Active/selected = var(--bg-sel) background + var(--brand) border
+   ========================================================================= */
+
+body { display: flex; flex-direction: column; height: 100vh; }
+
+/* ---- app header ---- */
+header {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 8px 12px; border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+header .hrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+header .title { font-weight: 600; font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* right-hand cluster of the top row: actions, then the language toggle last */
+.hactions { display: flex; align-items: center; gap: 6px; margin-left: auto; flex-shrink: 0; }
+
+/* ---- segmented control (e.g. language switch, unit toggle) ---- */
+.lang-toggle, .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.lang-btn, .seg-btn {
+  border: none; border-radius: 0; padding: 4px 11px; font-size: 12px;
+  background: var(--bg); color: var(--text-2); font-weight: 500; cursor: pointer;
+}
+.seg-btn { padding: 4px 10px; font-size: 11px; font-family: var(--mono); }
+.seg-btn + .seg-btn { border-left: 1px solid var(--border); }
+.lang-btn.active, .seg-btn.active { background: var(--brand); color: var(--brand-text); }
+.seg-btn.active { font-weight: 600; }
+.lang-btn:hover:not(.active), .seg-btn:hover:not(.active) { background: var(--bg-hover); }
+
+/* ---- layout shell: header / scrolling body ---- */
+/* `main` itself never scrolls — only `.tabbody` does, so scrolling inside a
+   tab can't drag the whole panel. */
+main {
+  flex: 1; min-height: 0; padding: 0; position: relative;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.top-fixed { flex-shrink: 0; padding: 12px 12px 0; }
+.tabbody { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; }
+
+.muted { color: var(--text-2); }
+.center-msg {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; height: 100%; gap: 10px; color: var(--text-2); padding: 24px;
+}
+.empty-pane {
+  height: 100%; display: flex; align-items: center; justify-content: center;
+  color: var(--text-2); text-align: center; padding: 8px;
+}
+.empty { padding: 34px 18px; text-align: center; color: var(--text-2); line-height: 1.5; }
+.empty .empty-t { font-weight: 600; color: var(--text); margin-bottom: 4px; font-size: 12px; }
+
+/* ---- buttons ---- */
+button {
+  padding: 7px 12px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--bg); color: var(--text); font-family: inherit; font-size: 12px;
+  cursor: pointer; font-weight: 500;
+}
+button:hover:not(:disabled) { background: var(--bg-hover); }
+button:disabled { opacity: 0.38; cursor: default; }
+button.primary { background: var(--brand); color: var(--brand-text); border-color: var(--brand); }
+button.primary:hover:not(:disabled) { filter: brightness(1.05); }
+button.ghost { border-color: transparent; background: transparent; color: var(--text-2); }
+button.ghost:hover:not(:disabled) { background: var(--bg-hover); }
+button.full { width: 100%; }
+button.sm { padding: 4px 8px; }
+/* Secondary note inside a button, e.g. the scope of an action: "토큰 정리 · 현재 페이지" */
+button .scope { color: var(--text-2); font-weight: 400; }
+button .scope::before { content: '· '; }
+button.xs { padding: 3px 7px; font-size: 11px; border-radius: 4px; }
+
+.icon-btn {
+  width: 30px; height: 26px; padding: 0; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.icon-btn svg { width: 22px; height: 22px; display: block; }
+
+/* ---- breadcrumb / back bar (navigation history) ---- */
+.navbar {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 10px; background: var(--bg-2);
+  border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.navbar .trail {
+  flex: 1; min-width: 0; font-size: 11px; color: var(--text); font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.navbtn {
+  width: 26px; height: 26px; padding: 0; border-radius: 50%; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border); background: var(--bg); color: var(--text);
+}
+.navbtn svg { width: 15px; height: 15px; display: block; }
+.navbtn:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--text-2); }
+.navbar .lang-toggle, header .lang-toggle { flex-shrink: 0; }
+/* the language toggle is always compact in the top row (header or navbar) */
+.navbar .lang-btn, header .lang-btn { padding: 2px 8px; font-size: 11px; }
+
+/* ---- floating tooltip ---- */
+/* position:fixed and outside scroll containers, so a pane with overflow:auto
+   can't clip it. */
+.tip {
+  position: fixed; z-index: 200; max-width: 250px;
+  background: var(--figma-color-bg-inverse, #1e1e1e);
+  color: var(--figma-color-text-oninverse, #fff);
+  padding: 7px 9px; border-radius: 6px; font-size: 11px; line-height: 1.45;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .3); pointer-events: none;
+}
+.tinfo {
+  width: 11px; height: 11px; margin-left: 4px; flex-shrink: 0;
+  display: inline-flex; align-items: center; vertical-align: -1px;
+  opacity: .8; cursor: help; pointer-events: auto;
+}
+.tinfo:hover { opacity: 1; }
+.tinfo svg { width: 100%; height: 100%; display: block; }
+
+/* ---- resizable panes (drag handle, like a layers panel) ---- */
+.rbox { position: relative; }
+.rbox-body { overflow-y: auto; overflow-x: hidden; }
+.rhandle {
+  height: 11px; margin: 0 0 4px; cursor: ns-resize; user-select: none;
+  display: flex; align-items: center; justify-content: center;
+}
+.rhandle::after {
+  content: ""; width: 30px; height: 2px; border-radius: 2px;
+  background: var(--border); transition: background .1s ease;
+}
+.rhandle:hover::after { background: var(--text-2); }
+
+/* ---- tabs ---- */
+.tabs {
+  display: flex; gap: 2px; margin: 0 -12px 0; padding: 0 10px;
+  background: var(--bg); border-bottom: 1px solid var(--border);
+}
+.tab {
+  border: none; background: transparent; border-radius: 0; margin-bottom: -1px;
+  padding: 9px 10px; font-size: 12px; font-weight: 500; color: var(--text-2);
+  border-bottom: 2px solid transparent; cursor: pointer;
+  display: flex; align-items: center; gap: 5px; white-space: nowrap;
+}
+.tab:hover:not(:disabled) { background: transparent; }
+.tab:hover:not(:disabled):not(.active) { color: var(--text); }
+.tab.active { color: var(--text); font-weight: 600; border-bottom-color: var(--brand); }
+.tab:disabled { opacity: .35; cursor: default; }
+.tab .tb {
+  font-size: 10px; font-weight: 600; color: var(--text-2);
+  background: var(--figma-color-bg-tertiary, #e9e9e9);
+  border-radius: 8px; padding: 0 6px; line-height: 15px;
+}
+.tab.active .tb { color: var(--text); }
+
+/* ---- collapsible section ---- */
+.sec { margin: 0 -12px; }
+.sec-head {
+  position: sticky; top: -12px; z-index: 5;
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 12px; background: var(--bg-2);
+  border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+  font-weight: 600; font-size: 12px; cursor: pointer; user-select: none;
+}
+.sec-head:hover { background: var(--bg-hover); }
+.sec-head .caret {
+  width: 15px; flex-shrink: 0; color: var(--text-2); font-size: 14px;
+  line-height: 1; transition: transform .1s ease; display: inline-block;
+  transform-origin: 45% 50%;
+}
+.sec-head.closed .caret { transform: rotate(-90deg); }
+.sec-head .sc { color: var(--text-2); font-weight: 400; }
+.sec-actions { margin-left: auto; display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.sec-actions button { font-weight: 500; }
+.sec-actions .mini {
+  padding: 2px 4px; font-size: 11px; border: 1px solid var(--border);
+  border-radius: 5px; background: var(--bg); color: var(--text);
+  font-family: inherit; font-weight: 500;
+}
+.sec-actions .mini:disabled { opacity: .45; }
+.sec-body { padding: 8px 12px 10px; }
+.sec-body.hidden { display: none; }
+
+/* ---- property row (label / value pair) ---- */
+.prow { display: flex; align-items: baseline; gap: 8px; padding: 2px 0; line-height: 1.5; }
+.prow .pk { color: var(--text-2); width: 104px; flex-shrink: 0; }
+.prow .pv { flex: 1; min-width: 0; word-break: break-word; }
+.prow.flag .pv { color: var(--brand); font-weight: 600; }
+.copy { cursor: pointer; border-radius: 3px; padding: 1px 3px; margin: 0 -3px; }
+.copy:hover { background: var(--bg-hover); }
+.mono { font-family: var(--mono); }
+
+/* ---- token pill (e.g. a bound variable name) ---- */
+.tok {
+  display: inline-block; margin-left: 6px; font-size: 11px; font-family: var(--mono);
+  padding: 1px 6px; border-radius: 4px; word-break: break-all; cursor: pointer;
+  background: var(--figma-color-bg-tertiary, #e9e9e9);
+  color: var(--text); border: 1px solid var(--border);
+}
+.tok:hover { background: var(--bg-hover); border-color: var(--text-2); }
+.tok-none {
+  display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 4px;
+  color: var(--text-2); border: 1px dashed var(--border); font-style: italic;
+}
+
+/* ---- swatch (color preview square) ---- */
+.sw {
+  width: 10px; height: 10px; border-radius: 2px; border: 1px solid var(--border);
+  display: inline-block; vertical-align: -1px; margin-right: 5px; flex-shrink: 0;
+}
+
+/* checkerboard background for translucent/transparent content previews */
+.checker {
+  background-color: #f0f0f2;
+  background-image:
+    linear-gradient(45deg, #dededf 25%, transparent 25%, transparent 75%, #dededf 75%),
+    linear-gradient(45deg, #dededf 25%, transparent 25%, transparent 75%, #dededf 75%);
+  background-size: 10px 10px;
+  background-position: 0 0, 5px 5px;
+}
+
+/* ---- labeled field chip (e.g. layout inspector: "W 240") ---- */
+.lp { display: flex; flex-direction: column; gap: 8px; }
+.lp-row { display: flex; align-items: flex-start; gap: 8px; }
+.lp-row .lp-label { width: 96px; flex-shrink: 0; color: var(--text-2); padding-top: 5px; line-height: 1.3; }
+.lp-fields { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.lp-fields.cols4 { display: grid; grid-template-columns: repeat(4, 1fr); flex-wrap: nowrap; }
+.lp-fields.cols4 .lp-field { min-width: 0; }
+.lp-fields.cols4 .lp-fv { overflow: hidden; text-overflow: ellipsis; }
+.lp-field {
+  display: inline-flex; align-items: center; gap: 5px; min-width: 0;
+  padding: 4px 7px; border: 1px solid var(--border); border-radius: 5px;
+  background: var(--bg-2); max-width: 100%;
+}
+.lp-field .lp-fk {
+  font-size: 10px; font-weight: 600; color: var(--text-2); flex-shrink: 0;
+  letter-spacing: .02em; text-transform: uppercase;
+}
+.lp-field .lp-fv { font-family: var(--mono); word-break: break-all; }
+.lp-field .lp-fm { color: var(--text-2); font-size: 11px; flex-shrink: 0; }
+.lp-field .tok { margin-left: 1px; }
+.lp-ic { width: 12px; height: 12px; flex-shrink: 0; color: var(--text-2); display: inline-flex; }
+.lp-ic svg { width: 100%; height: 100%; display: block; }
+
+/* ---- checkbox row (custom checkbox, ticks/toggles) ---- */
+.lp-check, .hcheck {
+  display: inline-flex; align-items: center; gap: 6px; color: var(--text-2);
+}
+.hcheck { gap: 5px; flex-shrink: 0; padding: 2px 5px; border-radius: 4px; cursor: pointer; user-select: none; font-weight: 500; }
+.hcheck:hover { background: var(--bg-hover); color: var(--text); }
+.hcheck.on { color: var(--text); }
+.lp-check .box, .hcheck .box {
+  width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--border);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 9px; line-height: 1; flex-shrink: 0; background: var(--bg);
+}
+.lp-check.on .box, .hcheck.on .box { background: var(--brand); border-color: var(--brand); color: var(--brand-text); }
+.lp-check.on { color: var(--text); }
+
+/* ---- subsection divider inside a section (e.g. Fill / Stroke groups) ---- */
+.subsec {
+  font-weight: 600; margin: 12px 0 6px; padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.subsec:first-child { margin-top: 0; padding-top: 0; border-top: none; }
+
+/* ---- data table ---- */
+.tr-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 6px; }
+/* table-layout:fixed makes a dragged column width land exactly */
+.tr-table { border-collapse: separate; border-spacing: 0; min-width: 100%; font-size: 12px; table-layout: fixed; }
+.tr-table th, .tr-table td {
+  padding: 6px 9px; text-align: left; vertical-align: top;
+  border-bottom: 1px solid var(--border); white-space: pre-wrap; overflow-wrap: break-word;
+}
+.tr-table tr:last-child th, .tr-table tr:last-child td { border-bottom: none; }
+.tr-table thead th {
+  background: var(--bg-2); font-weight: 600; position: sticky; top: 0; z-index: 2;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tr-table thead th .tr-def { color: var(--text-2); font-weight: 400; font-size: 11px; }
+.tr-name {
+  position: sticky; left: 0; z-index: 1; background: var(--bg);
+  font-weight: 600; word-break: break-all; border-right: 1px solid var(--border);
+}
+.tr-desc { color: var(--text-2); font-weight: 400; word-break: break-word; border-right: 1px solid var(--border); }
+.tr-desc.none { color: var(--text-2); opacity: .55; }
+.tr-table thead .tr-name { z-index: 3; background: var(--bg-2); }
+.tr-table tbody tr { cursor: pointer; }
+.tr-table tbody td:hover, .tr-table tbody .tr-name:hover { background: var(--bg-hover); }
+.tr-table td.empty { color: var(--red); font-style: italic; }
+.tr-sub { color: var(--text-2); font-weight: 400; font-size: 11px; margin-top: 2px; }
+/* copy affordance revealed on cell hover */
+.cp-ic { margin-left: 5px; color: var(--text-2); visibility: hidden; font-size: 11px; }
+.tr-table td:hover .cp-ic, .tr-table .tr-name:hover .cp-ic { visibility: visible; }
+/* column resize handle */
+.colres { position: absolute; top: 0; right: -4px; bottom: 0; width: 9px; cursor: col-resize; z-index: 6; }
+.colres::after {
+  content: ""; position: absolute; left: 4px; top: 0; bottom: 0; width: 1px;
+  background: var(--brand); opacity: 0; transition: opacity .1s ease;
+}
+.colres:hover::after, .colres.on::after { opacity: 1; }
+.tr-pad { padding: 0 !important; }
+
+/* ---- form controls ---- */
+select, .exp-num, .exp-suffix {
+  padding: 5px 6px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); color: var(--text); font-family: inherit; font-size: 12px;
+}
+select { font-size: 11px; cursor: pointer; }
+select:disabled { opacity: .4; cursor: default; }
+.exp-num { width: 56px; padding: 5px 6px; }
+
+/* range slider */
+.thumb-size {
+  width: 64px; height: 20px; margin: 0 3px; padding: 0; cursor: pointer; flex-shrink: 0;
+  -webkit-appearance: none; appearance: none; background: transparent;
+}
+.thumb-size::-webkit-slider-runnable-track { height: 5px; border-radius: 3px; background: var(--text-2); opacity: .5; }
+.thumb-size:hover::-webkit-slider-runnable-track { opacity: .75; }
+.thumb-size::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; margin-top: -4px;
+  width: 13px; height: 13px; border-radius: 50%;
+  background: var(--brand); cursor: pointer;
+  border: 2px solid var(--bg); box-shadow: 0 0 0 1px var(--text-2);
+}
+
+/* ---- card ---- */
+.card { border: 1px solid var(--border); border-radius: 6px; padding: 7px 9px; margin-bottom: 6px; }
+.card-head { display: flex; align-items: center; gap: 6px; }
+.card-head .ch-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.card-head .ch-sub { color: var(--text-2); font-size: 11px; }
+.card.own { border-color: var(--brand); }
+.card.clickable { cursor: pointer; }
+.card.clickable:hover { background: var(--bg-hover); }
+/* selected/picked state, reused for tree rows and cards alike */
+.picked { background: var(--bg-sel) !important; border-color: var(--brand) !important; border-radius: 6px; }
+
+/* ---- header/summary card (e.g. an inspected item's identity block) ---- */
+.var-head { background: var(--bg-2); border-radius: 6px; padding: 8px 10px; }
+.var-head .leaf { font-weight: 600; word-break: break-all; }
+.var-head .grp { color: var(--text-2); font-size: 11px; word-break: break-all; margin-top: 3px; }
+.var-head .desc {
+  margin-top: 7px; padding-top: 7px; border-top: 1px solid var(--border);
+  color: var(--text-2); line-height: 1.45; white-space: pre-wrap; word-break: break-word;
+}
+.badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.badge {
+  font-size: 11px; padding: 1px 7px; border-radius: 10px;
+  background: var(--bg); border: 1px solid var(--border); color: var(--text-2);
+}
+.badge.b-main { background: var(--bg); border-color: var(--text-2); color: var(--text); font-weight: 600; }
+.head-actions { display: flex; gap: 6px; margin-top: 8px; }
+.head-actions button { flex: 1; }
+
+/* ---- style pill (e.g. a picked text/fill/effect style) ---- */
+.style-pill {
+  display: flex; align-items: center; gap: 6px; width: 100%;
+  padding: 7px 9px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); cursor: pointer; text-align: left; margin-bottom: 6px;
+}
+.style-pill:hover { background: var(--bg-hover); }
+.style-pill .sp-name { flex: 1; min-width: 0; font-weight: 600; word-break: break-all; }
+.style-pill .sp-hint { color: var(--text-2); font-size: 11px; flex-shrink: 0; }
+.sp-icon {
+  width: 15px; height: 15px; flex-shrink: 0; color: var(--text-2);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.sp-icon svg { width: 100%; height: 100%; display: block; }
+.thidden { font-size: 11px; color: var(--text-2); flex-shrink: 0; }
+
+/* ---- tree row (nested, expandable list — e.g. a layer/component tree) ---- */
+.trow {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 6px; border-radius: 6px; cursor: pointer; border: 1px solid transparent;
+  user-select: none;
+}
+.trow:hover { background: var(--bg-hover); }
+.trow.current { cursor: default; }
+.trow.self { background: var(--bg-sel); border-color: var(--brand); }
+.trow.origin { background: var(--bg-sel); border-color: var(--brand) !important; }
+.trow .tname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trow .tsub { color: var(--text-2); font-size: 11px; flex-shrink: 0; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trow .tglyph { flex-shrink: 0; color: var(--text-2); font-size: 11px; }
+.tkids { margin-left: 9px; padding-left: 8px; border-left: 1px solid var(--border); }
+.tcount { color: var(--text-2); font-size: 11px; flex-shrink: 0; }
+.tcaret {
+  width: 17px; height: 17px; flex-shrink: 0; text-align: center; color: var(--text-2);
+  font-size: 14px; line-height: 17px; cursor: pointer; border-radius: 3px;
+  transform-origin: 45% 50%;
+}
+.tcaret:hover { background: var(--bg-hover); color: var(--text); }
+.tcaret.closed { transform: rotate(-90deg); }
+.tcaret.leaf { cursor: default; opacity: 0; }
+/* secondary action revealed only on hover of its row */
+.trow .tmain { visibility: hidden; }
+.trow:hover .tmain, .trow.current .tmain { visibility: visible; }
+
+/* ---- thumbnail (with checkerboard for transparency) ---- */
+.tthumb, .icon-prev {
+  flex-shrink: 0; border: 1px solid var(--border); border-radius: 3px; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+}
+.tthumb {
+  margin-right: 2px;
+  background-color: #f0f0f2;
+  background-image:
+    linear-gradient(45deg, #dededf 25%, transparent 25%, transparent 75%, #dededf 75%),
+    linear-gradient(45deg, #dededf 25%, transparent 25%, transparent 75%, #dededf 75%);
+  background-size: 8px 8px; background-position: 0 0, 4px 4px;
+}
+.tthumb img, .icon-prev img { max-width: 100%; max-height: 100%; display: block; }
+.icon-prev {
+  width: 44px; height: 44px; margin-right: 9px; border-radius: 4px;
+  background-color: #f0f0f2;
+  background-image:
+    linear-gradient(45deg, #dededf 25%, transparent 25%, transparent 75%, #dededf 75%),
+    linear-gradient(45deg, #dededf 25%, transparent 25%, transparent 75%, #dededf 75%);
+  background-size: 10px 10px; background-position: 0 0, 5px 5px;
+}
+.icon-prev img { max-width: 82%; max-height: 82%; }
+
+/* ---- category tags (fixed brand colors — match Figma's own editor accents) ---- */
+/* Slot pink, matching the color Figma gives slots in the editor. */
+.tslot {
+  flex-shrink: 0; font-size: 10px; font-weight: 600; line-height: 16px;
+  text-transform: uppercase; letter-spacing: .03em; padding: 0 6px; border-radius: 8px;
+  color: var(--figma-slot-pink); background: rgba(255, 69, 192, .14); border: 1px solid rgba(255, 69, 192, .45);
+}
+/* Component purple, matching the color Figma gives components in the editor. */
+.tvariant {
+  flex-shrink: 0; font-size: 10px; font-weight: 600; line-height: 16px;
+  text-transform: uppercase; letter-spacing: .03em; padding: 0 6px; border-radius: 8px;
+  color: var(--figma-component-purple); background: rgba(138, 56, 245, .14); border: 1px solid rgba(138, 56, 245, .5);
+}
+.text-badge {
+  flex-shrink: 0; font-size: 10px; font-weight: 600; line-height: 16px;
+  text-transform: uppercase; letter-spacing: .03em; padding: 0 6px; border-radius: 8px;
+  color: var(--text-2); border: 1px solid var(--border); background: var(--bg-2);
+}
+
+/* ---- auto layout direction widget ---- */
+.al-widget { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.al-grid {
+  width: 46px; height: 46px; flex-shrink: 0; padding: 4px;
+  display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr);
+  border: 1px solid var(--border); border-radius: 4px; background: var(--bg-2);
+}
+.al-cell { display: flex; align-items: center; justify-content: center; }
+.al-cell .dot { width: 2px; height: 2px; border-radius: 50%; background: var(--text-2); opacity: .55; }
+.al-bars { display: flex; align-items: center; justify-content: center; gap: 2px; }
+.al-bars.spread { justify-content: space-between; }
+.al-bars.h { flex-direction: row; height: 100%; }
+.al-bars.v { flex-direction: column; width: 100%; }
+.al-bar { background: var(--brand); border-radius: 1px; }
+.al-bars.h .al-bar { width: 3px; height: 9px; }
+.al-bars.v .al-bar { width: 9px; height: 3px; }
+.al-caption .al-dir { font-weight: 600; }
+.al-caption .al-sub { color: var(--text-2); font-size: 11px; margin-top: 2px; }
+
+/* ---- content / code preview box ---- */
+.content-box {
+  font-family: var(--mono); background: var(--bg-2); padding: 6px 8px;
+  border-radius: 4px; word-break: break-word; white-space: pre-wrap; max-height: 120px; overflow-y: auto;
+}
+.detail-box { border-left: 2px solid var(--border); padding: 4px 0 4px 10px; margin: 0 0 8px 4px; }
+.hidden-flag { color: var(--text-2); font-size: 11px; }
+
+/* ---- pagination ---- */
+.pager {
+  position: sticky; top: 22px; z-index: 4;
+  display: flex; align-items: center; gap: 6px;
+  margin: 0 -12px 8px; padding: 6px 12px;
+  background: var(--bg); border-bottom: 1px solid var(--border);
+}
+.pager .pgbtn { display: inline-flex; align-items: center; padding: 2px 5px; }
+.pager .pgbtn svg { width: 13px; height: 13px; display: block; }
+.pager .pgbtn:disabled { opacity: .35; cursor: default; }
+.pg-n { font-weight: 600; font-size: 11px; }
+.pg-range { margin-left: auto; color: var(--text-2); font-size: 11px; }
+
+/* ---- misc row/list primitives seen across panels ---- */
+.paint-row { display: flex; align-items: baseline; flex-wrap: wrap; padding: 2px 0; line-height: 1.5; }
+.paint-row .pv-line { width: 100%; }
+.pv-line { margin-top: 3px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.pv-line .tok { margin-left: 0; }
+.arrow { color: var(--text-2); flex-shrink: 0; }
+.sc-row { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border: 1px solid transparent; border-radius: 6px; cursor: pointer; }
+.sc-row:hover { background: var(--bg-hover); }
+.sc-sw {
+  width: 16px; height: 16px; border-radius: 4px; flex-shrink: 0; border: 1px solid var(--border);
+  background-image:
+    linear-gradient(45deg, #c8c8cc 25%, transparent 25%, transparent 75%, #c8c8cc 75%),
+    linear-gradient(45deg, #c8c8cc 25%, transparent 25%, transparent 75%, #c8c8cc 75%);
+  background-size: 8px 8px; background-position: 0 0, 4px 4px; background-color: #fff;
+  position: relative; overflow: hidden;
+}
+.sc-sw i { position: absolute; inset: 0; display: block; }
+.sc-val { font-family: var(--mono); flex-shrink: 0; }
+.sc-mid { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.sc-count { color: var(--text-2); font-size: 11px; flex-shrink: 0; }
+.eff-item { padding: 4px 0 0; }
+.eff-item + .eff-item { border-top: 1px dashed var(--border); margin-top: 4px; }
+.eff-title { display: flex; align-items: center; gap: 6px; }
+.eff-title .et-label { font-weight: 500; }
+.eff-title .et-sum { color: var(--text-2); font-family: var(--mono); font-size: 11px; word-break: break-all; }
+
+/* ---- Export-panel specific composites ---- */
+.exp-row { display: flex; align-items: center; gap: 4px; margin-bottom: 6px; flex-shrink: 0; }
+.exp-row .grow { flex: 1; min-width: 0; }
+.exp-row select { min-width: 0; }
+.dots { letter-spacing: 1px; padding: 4px 6px; }
+.dots.on { color: var(--brand); background: var(--bg-sel); }
+.dots.has-opts:not(.on) { color: var(--text); }
+.exp-more { border: 1px solid var(--border); border-radius: 6px; padding: 8px 9px; margin: 0 0 8px; background: var(--bg-2); }
+.exp-more-t { font-weight: 600; margin-bottom: 6px; }
+.exp-more .pk { width: 92px; }
+.exp-more select, .exp-suffix { width: 100%; }
+.exp-checks { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.exp-more .hcheck { padding-left: 0; }
+.exp-preview { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 8px; }
+.exp-preview-box {
+  margin-top: 8px; padding: 10px; border: 1px solid var(--border); border-radius: 6px;
+  display: flex; align-items: center; justify-content: center; min-height: 60px;
+  background-color: #f0f0f2;
+  background-image:
+    linear-gradient(45deg, #dededf 25%, transparent 25%, transparent 75%, #dededf 75%),
+    linear-gradient(45deg, #dededf 25%, transparent 25%, transparent 75%, #dededf 75%);
+  background-size: 12px 12px; background-position: 0 0, 6px 6px;
+}
+.exp-preview-img { max-width: 100%; max-height: 220px; display: block; }
+.exp-controls { display: flex; gap: 6px; align-items: center; margin-top: 8px; }
+.exp-controls .grow { flex: 1; }
+.tok-opts { margin: 0 0 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+.tok-opts-head { display: flex; align-items: center; gap: 4px; color: var(--text-2); font-size: 11px; margin-bottom: 6px; }
+.all-opts { padding-top: 2px; }
+
+/* =========================================================================
+   Additions shared by i18n / Config Manager / Arrow Connect /
+   Change Marker. Same visual language as above: tokens only, 6px radius,
+   12px text, hover = --bg-hover, focus/selected = --brand.
+   ========================================================================= */
+
+/* ---- text inputs ---- */
+input:not([type]), input[type="text"], input[type="password"], input[type="number"],
+input[type="search"], input[type="date"], textarea {
+  padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); color: var(--text); font-family: inherit; font-size: 12px;
+  min-width: 0;
+}
+textarea { line-height: 1.4; resize: vertical; }
+input:not([type]):focus, input[type="text"]:focus, input[type="password"]:focus, input[type="number"]:focus,
+input[type="search"]:focus, input[type="date"]:focus, textarea:focus, select:focus { outline: none; border-color: var(--brand); }
+input:disabled, textarea:disabled { opacity: .4; }
+input.invalid, textarea.invalid { border-color: var(--red); }
+::placeholder { color: var(--text-3); }
+/* borderless until hovered — inline rename fields */
+input.bare { border-color: transparent; background: transparent; }
+input.bare:hover { border-color: var(--border); }
+input.bare:focus { border-color: var(--brand); background: var(--bg); }
+
+/* labeled field: small muted label above its control */
+.field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+.field > label, .field > .lbl { color: var(--text-2); font-size: 11px; font-weight: 500; }
+.field-err { color: var(--red); font-size: 11px; }
+
+/* ---- semantic buttons ---- */
+button.danger { color: var(--red); }
+button.danger-fill { background: var(--red-solid); border-color: var(--red-solid); color: var(--brand-text); }
+button.danger-fill:hover:not(:disabled) { background: var(--red-solid); filter: brightness(1.05); }
+button.selected { background: var(--bg-sel); border-color: transparent; color: var(--text-brand); }
+button.selected:disabled { opacity: 1; }
+
+/* ---- small pills: warning / danger / link variants of .badge ---- */
+.badge.warn { background: var(--warn-bg); border-color: transparent; color: var(--warn); }
+.badge.danger { background: var(--red-bg); border-color: transparent; color: var(--red); }
+.badge.link { background: var(--bg-sel); border-color: transparent; color: var(--text-brand); cursor: pointer; }
+
+/* ---- inline notices ---- */
+.notice {
+  display: flex; align-items: center; gap: 8px; padding: 7px 9px; margin-bottom: 8px;
+  border: 1px dashed var(--border); border-radius: 6px; color: var(--text-2); font-size: 11px; line-height: 1.4;
+}
+.notice > span:not(.ico) { flex: 1; }
+/* Colored text on a tinted surface is hard to read (especially in dark mode),
+   so status notices keep body text at --text and carry the color in a left bar. */
+.notice.err, .notice.warn, .notice.info {
+  border-style: solid; border-width: 1px 1px 1px 3px; color: var(--text); font-size: 12px; line-height: 1.45;
+}
+.notice.err { border-color: var(--red); background: var(--red-bg); }
+.notice.warn { border-color: var(--warn); background: var(--warn-bg); }
+.notice.info { border-color: var(--border); border-left-color: var(--brand); background: var(--bg-2); }
+.notice .ico { flex: 0 0 14px; width: 14px; height: 14px; margin-top: 1px; }
+.notice.err .ico { color: var(--red); }
+.notice.warn .ico { color: var(--warn); }
+
+/* ---- toast (in-panel, bottom) ---- */
+.toast {
+  position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 60;
+  padding: 8px 10px; border-radius: 6px; font-size: 12px; white-space: pre-line;
+  background: var(--red-bg); color: var(--red); display: none;
+}
+.toast.show { display: block; }
+.toast.warn { background: var(--warn-bg); color: var(--warn); }
+
+/* ---- modal dialog (Figma's iframe blocks window.confirm/prompt) ---- */
+.overlay {
+  position: fixed; inset: 0; z-index: 100; padding: 16px;
+  background: var(--scrim); display: flex; align-items: center; justify-content: center;
+}
+.dialog {
+  width: 100%; max-width: 360px; padding: 12px; border-radius: 6px;
+  background: var(--bg); border: 1px solid var(--border); box-shadow: var(--shadow-float);
+  display: flex; flex-direction: column; gap: 12px;
+}
+.dialog input { width: 100%; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 6px; }
+
+/* ---- dropdown menu (dark, like Figma's own menus) ---- */
+.menu {
+  position: fixed; z-index: 110; min-width: 200px; max-width: 320px; padding: 6px;
+  background: var(--figma-color-bg-menu, #1e1e1e); color: var(--figma-color-text-menu, #fff);
+  border-radius: 6px; box-shadow: var(--shadow-float);
+  font-size: 12px; line-height: 18px; display: flex; flex-direction: column;
+}
+.menu input[type="text"] {
+  background: rgba(255, 255, 255, .08); border-color: transparent; color: inherit; margin-bottom: 4px;
+}
+.menu input[type="text"]:focus { border-color: var(--brand); }
+.menu-list { overflow-y: auto; }
+.menu-group { padding: 6px 8px 2px; font-size: 11px; opacity: .55; }
+.menu-item { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
+.menu-item .meta { margin-left: auto; opacity: .55; font-size: 11px; white-space: nowrap; }
+.menu-item .check { width: 12px; flex: none; text-align: center; }
+.menu-item:hover, .menu-item.active { background: var(--brand); color: var(--brand-text); }
+.menu-item:hover .meta, .menu-item.active .meta { opacity: .85; }
+.menu-item.danger { color: var(--figma-color-text-menu-danger, #ff8a7a); }
+.menu-item.danger:hover, .menu-item.danger.active { background: var(--red-solid); color: var(--brand-text); }
+.menu-empty { padding: 8px; opacity: .6; }
+.menu-sep { height: 1px; margin: 4px 2px; background: rgba(255, 255, 255, .12); }
+
+/* ---- toggle switch (on <input type=checkbox class=switch> or a <span>) ---- */
+.switch {
+  appearance: none; -webkit-appearance: none; position: relative; flex: none; margin: 0; cursor: pointer;
+  width: 28px; height: 16px; border-radius: 8px; background: var(--bg-3); transition: background .12s;
+}
+.switch::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 6px;
+  background: var(--figma-color-icon-onbrand, #fff); box-shadow: 0 1px 2px rgba(0, 0, 0, .25); transition: left .12s;
+}
+.switch:checked, .switch.on { background: var(--brand); }
+.switch:checked::after, .switch.on::after { left: 14px; }
+.switch:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+/* ---- window resize grip (bottom-right; plugin resizes itself via figma.ui.resize) ---- */
+.resize-grip {
+  position: fixed; right: 0; bottom: 0; width: 14px; height: 14px; cursor: nwse-resize; z-index: 120;
+  background: linear-gradient(135deg, transparent 50%, var(--text-3) 50%, var(--text-3) 58%, transparent 58%,
+    transparent 70%, var(--text-3) 70%, var(--text-3) 78%, transparent 78%);
+}
+
+/* ---- busy spinner ---- */
+.spin {
+  width: 13px; height: 13px; border-radius: 50%; flex-shrink: 0; display: inline-block;
+  border: 2px solid var(--border); border-top-color: var(--brand); animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---- footer bar ---- */
+.foot {
+  flex-shrink: 0; padding: 8px 12px; border-top: 1px solid var(--border);
+  font-size: 11px; color: var(--text-2); line-height: 1.4;
+}
+/* @ds:end */
+
+  /* ---- Dev Inspector only ---- */
+  /* component properties, tucked under the description */
+  .hp { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+  .hp-body { margin-top: 6px; }
+  .style-pill .sp-toggle { flex-shrink: 0; }
+</style>
+</head>
+<body>
+  <header>
+    <div class="hrow">
+      <div class="title" id="apptitle">Dev Inspector</div>
+      <div class="hactions">
+        <button id="refresh" class="ghost sm">↻</button>
+        <div class="lang-toggle" id="langtoggle"></div>
+      </div>
+    </div>
+  </header>
+  <div id="navbar" class="navbar"></div>
+  <main id="main"></main>
+  <div id="tip" class="tip" style="display:none"></div>
+
+<script>
+  var $ = function (id) { return document.getElementById(id); };
+  var main = $("main");
+
+  var S = {
+    lang: "ko",
+    selection: null,
+    node: null,
+    pinned: false,
+    count: 0,
+    error: "",
+    back: [],           // browser-style history: [{id, name}]
+    fwd: [],
+    open: {             // per-section collapsed state, remembered across nodes
+      structure: true, icons: true, modes: true, language: true, layout: true, colors: true,
+      scroll: true,
+      inParent: false, grids: true, typography: true, appearance: true, effects: true, content: true,
+    },
+    detail: {},         // "type" | "effN" -> details expanded
+    treeOpen: {},       // node id -> expanded in the structure tree
+    lastTreeRoot: null, // tree root of the previous state, to know when to reset
+    lastPathId: null,   // node we last auto-revealed in the tree
+    navTarget: null,    // node id we asked to navigate to (keeps the back stack)
+    noMark: null,       // node we arrived at going Forward: no origin marker there
+    pickedId: null,     // row last clicked to select a layer on canvas
+    origins: {},        // tree rootId -> {id, gen}: the row we left via Go to Main Component
+    treeGen: 0,         // bumped whenever the tree re-roots and treeOpen is cleared
+    hoveredId: null,    // Language row currently previewing its layer on canvas
+    hoverLock: false,   // ignore hovers until the pointer really moves again
+    dragging: false,    // a resize handle is being dragged
+    scrolling: false,   // a scroll is in progress; renders wait for it to settle
+    scrollTimer: null,
+    heights: {},        // user-dragged pane heights, persisted via clientStorage
+    thumbs: {},         // nodeId -> data URL of the row thumbnail
+    thumbAsked: {},     // nodeId -> already requested, so we ask once
+    exportRows: null,   // export settings for the current layer
+    exportFor: null,    // which node exportRows belongs to
+    exportPreview: false,
+    iconOpts: {},       // nodeId -> export options for that icon card
+    showThumbs: true,
+    thumbSize: 24,
+    pendingState: null, // newest state held back while a hover is live
+    tab: "inspect",     // inspect | language | structure | icons
+    propsOpen: true,    // component properties expanded under the description
+    lastId: null,
+    pendingExport: "download",
+    runs: {},           // runId -> {files, mode, zipName} for an export in flight
+    runSeq: 0,
+    iconAll: null,      // batch export settings shared by the Icons tab's Export all
+    langCols: {},       // language table column key -> user-dragged width in px
+    exporting: null,    // {done, total} while an Export all run is in flight
+    exportInner: true,  // export the asset inside an icon wrapper, not the frame
+    tokenDots: true,    // show token paths dotted (a.b.c) rather than slashed
+    previewAsked: {},   // nodeId -> preview already requested, so we ask once
+    iconPage: 0,        // which page of the icon list is showing
+    previews: {},       // nodeId -> data URL thumbnail
+  };
+
+  var DEFAULT_HEIGHTS = { structure: 200 };
+
+  /* ---------------- i18n ---------------- */
+
+  var T = {
+    en: {
+      title: "Dev Inspector",
+      nothingTitle: "Nothing selected",
+      nothingBody: "Select a layer to inspect it.",
+      multipleTitle: "Multiple layers selected",
+      multipleBody: "Select a single layer to inspect it.",
+      errorTitle: "Something went wrong",
+      back: "Back", forward: "Forward",
+      returnToSel: "Return to selection",
+      selectOnCanvas: "Select on canvas",
+      selectAllUsing: function (n) { return "Select all " + n + " layers using this"; },
+      openMain: "Open main component",
+      pinnedNote: "Viewing a nested component",
+      secStructure: "Component structure",
+      secModes: "Modes",
+      mainBtn: "Go to Main Component",
+      collapseAll: "Collapse all",
+      thumbToggle: "Show thumbnails", thumbLabel: "Thumbnail", thumbSize: "Thumbnail size",
+      viewAll: "View all", hideAll: "Hide",
+      tabInfo: "Info", tabInspect: "Inspect", tabLanguage: "Language", tabExport: "Export",
+      secExport: "Export", addExport: "Add export setting", removeExport: "Remove",
+      exportSettings: "Export settings", suffix: "Suffix", none: "None",
+      exportAllSettings: "Settings for all icons",
+      svgDropHidden: "Drop 0% opacity layers",
+      svgDropHiddenTip: "Leave out layers a designer has switched off by setting opacity to 0. The whole layer goes, including anything nested inside it.",
+      tokenFmtHead: "Show and copy token names as",
+      tokenFmtTip: "Every token below is written this way, and copying one gives you exactly what you see \u2014 so pick the form your code uses. Hovering a token still shows its original Figma path.",
+      exportInner: function (n) { return "Export the icon inside: " + n; },
+      exportInnerTip: "This layer is an icon wrapper. Exporting it gives you the frame — its layout box, and a root group named after the frame. The icon inside is usually what you want.",
+      svgCleanClip: "Remove canvas-sized clip path",
+      svgCleanClipTip: "A frame with Clip content on exports a clip path the exact size of the canvas, which crops nothing but reopens as a 'Clip path group' and a stray Mask layer. A clip that could actually crop is kept.",
+      prevPage: "Previous page", nextPage: "Next page",
+      pageOf: function (a, b) { return "Page " + a + " / " + b; },
+      showingRange: function (a, b, n) { return a + "\u2013" + b + " of " + n; },
+      exportingN: function (a, b) { return "Exporting " + a + " / " + b; },
+      exportTooBig: "That export is too large to package. Try fewer icons, a smaller scale, or SVG.",
+      iconsTruncated: function (n) {
+        return "Showing the first " + n + " icons found. Select a smaller area to reach the rest.";
+      },
+      colorProfile: "Color profile", documentProfile: "Document", resampling: "Image resampling",
+      basic: "Basic", detailed: "Detailed", ignoreOverlap: "Ignore overlapping layers",
+      svgLabel: 'Add fill / stroke class',
+      svgLabelTip: 'Figma splits a group\'s paint into separate anonymous paths. This tags each one class="fill" or class="stroke" so they can be told apart and targeted in CSS. Layer ids are left untouched.',
+      svgPatch: "Restore stroke widths",
+      svgPatchTip: "Figma omits stroke-width on grouped layers, so SVG falls back to 1. This writes the real weights (and opacity) back from the layer.",
+      svgId: 'Include "id" attribute',
+      svgIdTip: "Export layer names using id attributes",
+      svgSimplify: "Simplify stroke",
+      svgSimplifyTip: "On: express inside/outside strokes as a stroke-width attribute, which SVG can only approximate. Off: keep exact geometry using masks and outlined paths.",
+      svgOutlineText: "Outline text",
+      svgOutlineTextTip: "Convert text to vector paths instead of <text> elements",
+      ignoreOverlapTip: "Export only this layer's own contents, excluding anything overlapping it",
+      preview: "Preview", widthMode: "Width…", heightMode: "Height…",
+      exportNamed: function (n) { return "Export " + n; },
+      noExportTitle: "Not exportable",
+      noExportBody: "This layer type can't be exported.",
+      tabStructure: "Structure", tabIcons: "Icons",
+      slot: "In Slot", external: "External source",
+      variantBadge: "Variant", variantBtn: "Select this variant",
+      variantTip: "One variant of a component set. It is a component in its own right, not an instance of another one.",
+      slotTip: "This component sits in another component's slot — a placeholder the parent exposes so different content can be dropped in without detaching the instance.",
+      secLanguage: "Translation",
+      secColors: "Selection colors",
+      noToken: "no token",
+      dragResize: "Drag to resize",
+      noSelection: "No layer selected",
+      noLangTitle: "No language variables",
+      noLangBody: 'Nothing in this layer is bound to a variable from the "language" collection.',
+      noIconsTitle: "No icons here",
+      noIconsBody: "Nothing named icon-frame in this layer, its parents, or inside it.",
+      gridStyle: "Style",
+      variable: "Variable", defaultMode: "default", noValue: "not set", copyName: "Copy name",
+      lblResizing: "Size", lblAlignment: "Alignment", lblPadding: "Padding",
+      lblGrid: "Grid", lblGaps: "Gaps", lblGridPlace: "Grid placement",
+      lblPosition: "Position", lblEdges: "Edges",
+      edgeT: "Top", edgeR: "Right", edgeB: "Bottom", edgeL: "Left",
+      lblStrokePos: "Position", lblSides: "Sides", lblStrokeStyle: "Style", lblEnds: "Ends",
+      abbrWeight: "Weight", abbrDash: "Dash", abbrPattern: "Pattern",
+      abbrEnds: "End points", abbrJoin: "Join", abbrMiter: "Miter",
+      abbrGap: "Gap", abbrCrossGap: "Cross", abbrCols: "Cols", abbrRows: "Rows",
+      abbrColGap: "Col", abbrRowGap: "Row", abbrCol: "Col span", abbrRow: "Row span",
+      abbrColStart: "Col start", abbrRowStart: "Row start",
+      abbrPadAll: "All", abbrPadV: "T+B", abbrPadH: "L+R",
+      abbrPadT: "Top", abbrPadB: "Bottom", abbrPadL: "Left", abbrPadR: "Right",
+      abbrPos: "Position", absolute: "Absolute", clipContent: "Clip content",
+      spaceBetween: "Space between",
+      exportBtn: "Export",
+      secIcons: "Icon export",
+      secProps: "Component Properties",
+      secScroll: "Scroll behavior",
+      scrollNone: "No scroll behavior — scrolls with its parent, contents don\u2019t scroll.",
+      lblScrollPos: "Position",
+      lblOverflow: "Overflow",
+      scrollSCROLLS: "Scroll with parent",
+      scrollFIXED: "Fixed (stay in place)",
+      scrollSTICKY_SCROLLS: "Sticky (stay in place when scrolling past)",
+      ovNONE: "No scrolling",
+      ovHORIZONTAL: "Horizontal",
+      ovVERTICAL: "Vertical",
+      ovBOTH: "Both directions",
+      description: "Description",
+      noDescription: "-",
+      exportAll: "Export all",
+      secLayout: "Layout",
+      secGrids: "Layout grid",
+      secTypography: "Type",
+      secAppearance: "Appearance",
+      secEffects: "Effects",
+      secContent: "Content",
+      noNested: "No nested components.",
+      thisLayer: "this layer",
+      instanceOf: "Instance of ",
+      detached: "detached",
+      library: "library",
+      showDetails: "details",
+      hideDetails: "hide",
+      noStyle: "No text style",
+      mixedStyles: "Mixed text styles",
+      segment: "Segment ",
+      fill: "Fill",
+      stroke: "Stroke",
+      effectsHere: "on this layer",
+      effectsNested: "nested",
+      effectsNone: "No effects on this layer or inside it.",
+      jump: "Go to layer",
+      copied: "Copied: ",
+      exportSvg: "SVG",
+      exportCopy: "Copy SVG",
+      png: "PNG",
+      iconSelf: "selected",
+      iconAncestor: "parent",
+      iconChild: "inside",
+      noIcons: "No icon-frame found here.",
+      truncatedList: "List truncated.",
+      hidden: "hidden",
+      variants: "Variants: ",
+    },
+    ko: {
+      title: "Dev Inspector",
+      nothingTitle: "선택된 항목 없음",
+      nothingBody: "Layer를 선택하면 정보를 확인할 수 있습니다.",
+      multipleTitle: "여러 layer가 선택됨",
+      multipleBody: "하나의 layer만 선택해 주세요.",
+      errorTitle: "문제가 발생했습니다",
+      back: "뒤로", forward: "앞으로",
+      returnToSel: "선택한 layer로 돌아가기",
+      selectOnCanvas: "캔버스에서 선택",
+      selectAllUsing: function (n) { return "이 색상을 사용하는 " + n + "개 layer 모두 선택"; },
+      openMain: "Main component 열기",
+      pinnedNote: "중첩된 component를 보는 중",
+      secStructure: "Component 구조",
+      secModes: "Mode",
+      mainBtn: "Main component로 이동",
+      collapseAll: "모두 접기",
+      thumbToggle: "Thumbnail 표시", thumbLabel: "Thumbnail", thumbSize: "Thumbnail 크기",
+      viewAll: "전체 보기", hideAll: "접기",
+      tabInfo: "정보", tabInspect: "속성", tabLanguage: "언어", tabExport: "내보내기",
+      secExport: "내보내기", addExport: "내보내기 설정 추가", removeExport: "제거",
+      exportSettings: "내보내기 설정", suffix: "접미사", none: "없음",
+      exportAllSettings: "모든 아이콘 설정",
+      svgDropHidden: "불투명도 0% layer 제외",
+      svgDropHiddenTip: "불투명도를 0으로 지정해 꺼둔 layer를 내보내기에서 제외합니다. 그 안에 중첩된 요소까지 함께 제외됩니다.",
+      tokenFmtHead: "Token 이름 표시 및 복사 형식",
+      tokenFmtTip: "아래 모든 token이 이 형식으로 표시되고, 복사하면 보이는 그대로 복사됩니다. 코드에서 쓰는 형식을 선택하세요. 원래 Figma 경로는 token에 마우스를 올리면 확인할 수 있습니다.",
+      exportInner: function (n) { return "안쪽 아이콘 내보내기: " + n; },
+      exportInnerTip: "이 layer는 아이콘 래퍼입니다. 그대로 내보내면 frame의 layout 박스와 frame 이름의 그룹이 나옵니다. 보통은 안쪽 아이콘이 필요한 대상입니다.",
+      svgCleanClip: "캔버스 크기 clip path 제거",
+      svgCleanClipTip: "'내용 자르기'가 켜진 frame은 캔버스와 같은 크기의 clip path를 함께 내보냅니다. 실제로 잘리는 건 없지만 다시 열면 'Clip path group'과 Mask layer가 생깁니다. 실제로 잘라내는 clip은 그대로 둡니다.",
+      prevPage: "이전 페이지", nextPage: "다음 페이지",
+      pageOf: function (a, b) { return a + " / " + b + " 페이지"; },
+      showingRange: function (a, b, n) { return n + "개 중 " + a + "\u2013" + b; },
+      exportingN: function (a, b) { return "내보내는 중 " + a + " / " + b; },
+      exportTooBig: "내보낼 파일이 너무 커서 압축할 수 없습니다. 아이콘 수나 배율을 줄이거나 SVG로 내보내세요.",
+      iconsTruncated: function (n) {
+        return "찾은 아이콘 중 처음 " + n + "개만 표시합니다. 더 작은 범위를 선택하면 나머지를 볼 수 있습니다.";
+      },
+      colorProfile: "Color profile", documentProfile: "문서", resampling: "이미지 resampling",
+      basic: "기본", detailed: "정밀", ignoreOverlap: "겹치는 layer 무시",
+      svgLabel: "채우기 / 선 class 추가",
+      svgLabelTip: 'Figma는 그룹의 paint를 이름 없는 path로 분리합니다. 각 path에 class="fill" 또는 class="stroke"를 붙여 구분하고 CSS로 선택할 수 있게 합니다. layer id는 그대로 둡니다.',
+      svgPatch: "선 두께 복원",
+      svgPatchTip: "Figma는 그룹 layer의 stroke-width를 생략해 SVG 기본값 1이 적용됩니다. 실제 두께와 불투명도를 layer에서 다시 기록합니다.",
+      svgId: '"id" 속성 포함',
+      svgIdTip: "Layer 이름을 id 속성으로 내보냅니다",
+      svgSimplify: "선 단순화",
+      svgSimplifyTip: "켜기: 안쪽/바깥쪽 선을 stroke-width 속성으로 표현합니다(SVG는 근사만 가능). 끄기: mask와 윤곽선 path로 정확한 형태를 유지합니다.",
+      svgOutlineText: "텍스트 윤곽선화",
+      svgOutlineTextTip: "텍스트를 <text> 대신 vector path로 변환합니다",
+      ignoreOverlapTip: "겹치는 요소를 제외하고 이 layer의 내용만 내보냅니다",
+      preview: "미리보기", widthMode: "너비…", heightMode: "높이…",
+      exportNamed: function (n) { return n + " 내보내기"; },
+      noExportTitle: "내보낼 수 없음",
+      noExportBody: "이 layer 유형은 내보낼 수 없습니다.",
+      tabStructure: "구조", tabIcons: "아이콘",
+      slot: "Slot에 배치됨", external: "외부 소스",
+      variantBadge: "Variant", variantBtn: "이 variant 선택",
+      variantTip: "Component set의 variant입니다. 다른 component의 instance가 아니라 그 자체가 component입니다.",
+      slotTip: "이 component는 상위 component의 slot에 들어가 있습니다. slot은 상위 component가 열어둔 자리로, instance를 분리하지 않고 다른 콘텐츠를 넣을 수 있습니다.",
+      secLanguage: "번역",
+      secColors: "선택 영역 색상",
+      noToken: "Token 없음",
+      dragResize: "드래그하여 높이 조절",
+      noSelection: "선택된 layer 없음",
+      noLangTitle: "언어 변수 없음",
+      noLangBody: '이 layer에는 "language" collection 변수가 연결된 항목이 없습니다.',
+      noIconsTitle: "아이콘 없음",
+      noIconsBody: "이 layer와 상위/하위에 icon-frame이 없습니다.",
+      gridStyle: "Style",
+      variable: "변수", defaultMode: "기본", noValue: "미설정", copyName: "이름 복사",
+      lblResizing: "크기", lblAlignment: "정렬", lblPadding: "Padding",
+      lblGrid: "Grid", lblGaps: "간격", lblGridPlace: "Grid 배치",
+      lblPosition: "위치", lblEdges: "가장자리",
+      edgeT: "위", edgeR: "오른쪽", edgeB: "아래", edgeL: "왼쪽",
+      lblStrokePos: "위치", lblSides: "면", lblStrokeStyle: "Style", lblEnds: "끝",
+      abbrWeight: "두께", abbrDash: "점선", abbrPattern: "패턴",
+      abbrEnds: "끝점", abbrJoin: "모서리", abbrMiter: "Miter",
+      abbrGap: "간격", abbrCrossGap: "교차", abbrCols: "열", abbrRows: "행",
+      abbrColGap: "열", abbrRowGap: "행", abbrCol: "열 병합", abbrRow: "행 병합",
+      abbrColStart: "시작 열", abbrRowStart: "시작 행",
+      abbrPadAll: "전체", abbrPadV: "위+아래", abbrPadH: "좌+우",
+      abbrPadT: "위", abbrPadB: "아래", abbrPadL: "왼쪽", abbrPadR: "오른쪽",
+      abbrPos: "위치", absolute: "절대 위치", clipContent: "넘침 자르기",
+      spaceBetween: "양끝 정렬",
+      exportBtn: "내보내기",
+      secIcons: "아이콘 내보내기",
+      secProps: "Component 속성",
+      secScroll: "스크롤 동작",
+      scrollNone: "스크롤 동작 없음 — 부모와 함께 스크롤되고, 내용은 스크롤되지 않습니다.",
+      lblScrollPos: "위치",
+      lblOverflow: "Overflow",
+      scrollSCROLLS: "부모와 함께 스크롤",
+      scrollFIXED: "고정 (제자리 유지)",
+      scrollSTICKY_SCROLLS: "고정됨 (지나갈 때 제자리 유지)",
+      ovNONE: "스크롤 없음",
+      ovHORIZONTAL: "가로",
+      ovVERTICAL: "세로",
+      ovBOTH: "가로 및 세로",
+      description: "설명",
+      noDescription: "-",
+      exportAll: "전체 내보내기",
+      secLayout: "Layout",
+      secGrids: "Layout grid",
+      secTypography: "Typography",
+      secAppearance: "Style",
+      secEffects: "Effect",
+      secContent: "내용",
+      noNested: "중첩된 component가 없습니다.",
+      thisLayer: "현재 layer",
+      instanceOf: "Instance: ",
+      detached: "분리됨",
+      library: "라이브러리",
+      showDetails: "상세",
+      hideDetails: "접기",
+      noStyle: "텍스트 style 없음",
+      mixedStyles: "여러 텍스트 style 혼합",
+      segment: "구간 ",
+      fill: "채우기",
+      stroke: "선",
+      effectsHere: "현재 layer",
+      effectsNested: "하위",
+      effectsNone: "이 layer와 하위에 effect가 없습니다.",
+      jump: "Layer로 이동",
+      copied: "복사됨: ",
+      exportSvg: "SVG",
+      exportCopy: "SVG 복사",
+      png: "PNG",
+      iconSelf: "선택됨",
+      iconAncestor: "상위",
+      iconChild: "하위",
+      noIcons: "icon-frame을 찾을 수 없습니다.",
+      truncatedList: "목록이 잘렸습니다.",
+      hidden: "숨김",
+      variants: "Variant: ",
+    },
+  };
+
+  // Property labels, keyed by what code.js sends.
+  var L = {
+    en: {
+      direction: "Direction", wrap: "Wrap", gap: "Gap", crossGap: "Cross axis gap",
+      columnGap: "Column gap", rowGap: "Row gap", gridCols: "Columns", gridRows: "Rows",
+      padding: "Padding", padV: "Padding (Top + Bottom)", padH: "Padding (Left + Right)",
+      padT: "Padding (Top)", padR: "Padding (Right)", padB: "Padding (Bottom)", padL: "Padding (Left)",
+      zReverse: "Reverse Z order", strokeInLayout: "Stroke in layout", clips: "Clip content",
+      minW: "Min Width", maxW: "Max Width", minH: "Min Height", maxH: "Max Height",
+      width: "Width", height: "Height", position: "Position",
+      gridCol: "Grid column", gridRow: "Grid row", colSpan: "Column span", rowSpan: "Row span",
+      alignSelf: "Align self",
+      pattern: "Pattern", count: "Count", gutter: "Gutter", gridMargin: "Margin",
+      gridWidth: "Width", cellSize: "Cell size", alignment: "Alignment",
+      strokeWeight: "Stroke weight", strokeAlign: "Stroke align", dash: "Dash pattern",
+      strokeT: "Stroke (Top)", strokeR: "Stroke (Right)", strokeB: "Stroke (Bottom)", strokeL: "Stroke (Left)",
+      radius: "Corner radius", radiusTL: "Corner (Top left)", radiusTR: "Corner (Top right)",
+      radiusBR: "Corner (Bottom right)", radiusBL: "Corner (Bottom left)", smoothing: "Corner smoothing",
+      opacity: "Opacity", blend: "Blend mode", rotation: "Rotation",
+      font: "Font", weight: "Weight", size: "Size", lineHeight: "Line height",
+      letterSpacing: "Letter spacing", paragraphSpacing: "Paragraph spacing",
+      paragraphIndent: "Paragraph indent", case: "Case", decoration: "Decoration",
+      leadingTrim: "Leading trim", autoResize: "Resizing", truncate: "Truncate",
+      maxLines: "Max lines", alignH: "Horizontal align", alignV: "Vertical align",
+      wrapText: "Text wrap", listSpacing: "List spacing", hangingPunct: "Hanging punctuation",
+      offsetX: "Offset X", offsetY: "Offset Y", blur: "Blur", spread: "Spread",
+      color: "Color", showBehind: "Show behind layer",
+    },
+    ko: {
+      direction: "방향", wrap: "줄바꿈", gap: "간격", crossGap: "교차축 간격",
+      columnGap: "열 간격", rowGap: "행 간격", gridCols: "열 개수", gridRows: "행 개수",
+      padding: "Padding", padV: "Padding (위 + 아래)", padH: "Padding (왼쪽 + 오른쪽)",
+      padT: "Padding (위)", padR: "Padding (오른쪽)", padB: "Padding (아래)", padL: "Padding (왼쪽)",
+      alignPrimary: "주축 정렬", alignCounter: "교차축 정렬",
+      zReverse: "Z순서 반전", strokeInLayout: "선 포함", clips: "넘침 자르기",
+      minW: "최소 너비", maxW: "최대 너비", minH: "최소 높이", maxH: "최대 높이",
+      radius: "모서리 반경",
+      width: "너비", height: "높이", position: "위치",
+      gridCol: "시작 열", gridRow: "시작 행", colSpan: "열 병합", rowSpan: "행 병합",
+      alignSelf: "개별 정렬",
+      pattern: "유형", count: "개수", gutter: "Gutter", gridMargin: "여백",
+      gridWidth: "폭", cellSize: "Cell 크기", alignment: "정렬",
+      strokeWeight: "선 두께", strokeAlign: "선 위치", dash: "점선",
+      strokeT: "위 선", strokeR: "오른쪽 선", strokeB: "아래 선", strokeL: "왼쪽 선",
+      radiusTL: "모서리 (왼쪽 위)", radiusTR: "모서리 (오른쪽 위)",
+      radiusBR: "모서리 (오른쪽 아래)", radiusBL: "모서리 (왼쪽 아래)", smoothing: "모서리 smoothing",
+      opacity: "불투명도", blend: "Blend mode", rotation: "회전", constraints: "제약",
+      font: "폰트", weight: "두께", size: "크기", lineHeight: "행간", letterSpacing: "자간",
+      paragraphSpacing: "문단 간격", paragraphIndent: "들여쓰기",
+      case: "대소문자", decoration: "장식", leadingTrim: "여백 제거",
+      autoResize: "자동 크기", truncate: "말줄임", maxLines: "최대 줄 수",
+      alignH: "가로 정렬", alignV: "세로 정렬", wrapText: "줄바꿈 방식",
+      listSpacing: "목록 간격", hangingPunct: "문장부호 내어쓰기",
+      offsetX: "X offset", offsetY: "Y offset", blur: "흐림", spread: "확산",
+      color: "색상", showBehind: "뒤 그림자 표시",
+    },
+  };
+
+  // Values arrive already prettified in English; translate the common ones.
+  var V = {
+    ko: {
+      "Horizontal": "가로", "Vertical": "세로", "Min": "시작", "Max": "끝",
+      "Center": "가운데", "Space between": "양끝 정렬",
+      "Hug": "내용에 맞춤", "Fill": "채우기", "Fixed": "고정", "Auto": "자동",
+      "Yes": "예", "No": "아니오", "Off": "없음", "Mixed": "혼합",
+      "Absolute": "절대 위치", "Stretch": "늘이기", "Inherit": "상속",
+      "None (absolute)": "없음 (절대 위치)", "Ending (…)": "말줄임 (…)",
+      "Unlimited": "제한 없음", "Auto (space between)": "자동 (양끝 정렬)",
+      "Wrap": "줄바꿈", "None": "없음", "Left": "왼쪽", "Right": "오른쪽",
+      "Top": "위", "Bottom": "아래", "Scale": "비율", "Columns": "열", "Rows": "행",
+      "Truncate": "잘라내기",
+      "Solid": "실선", "Dashed": "점선", "Custom": "사용자 지정",
+      "Left and right": "좌우", "Top and bottom": "상하",
+      "Inside": "안쪽", "Outside": "바깥쪽",
+      "Space between": "양끝 정렬", "Balance": "균형", "Uppercase": "대문자",
+      "Lowercase": "소문자", "Title": "첫 글자 대문자", "Underline": "밑줄",
+      "Strikethrough": "취소선", "Height": "높이", "Width and height": "너비와 높이",
+      "Truncate (…)": "말줄임 (…)", "Image": "이미지",
+    },
+  };
+
+  function t(k) {
+    var d = T[S.lang] || T.en;
+    return d[k] !== undefined ? d[k] : (T.en[k] !== undefined ? T.en[k] : k);
+  }
+  function lbl(k) {
+    var d = L[S.lang];
+    if (d && d[k]) return d[k];
+    return k.replace(/([A-Z])/g, " $1").replace(/^./, function (c) { return c.toUpperCase(); });
+  }
+  function val(v) {
+    var d = V[S.lang];
+    if (d && d[v]) return d[v];
+    return v;
+  }
+
+  function esc(s) {
+    return String(s === null || s === undefined ? "" : s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+  function post(m) { parent.postMessage({ pluginMessage: m }, "*"); }
+
+  function copyText(s) {
+    var ta = document.createElement("textarea");
+    ta.value = s;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand("copy"); } catch (e) {}
+    document.body.removeChild(ta);
+    var short = s.length > 40 ? s.slice(0, 40) + "…" : s;
+    post({ type: "notify", message: t("copied") + short });
+  }
+
+  /* ---------------- incoming ---------------- */
+
+  onmessage = function (e) {
+    var msg = e.data.pluginMessage;
+    if (!msg) return;
+
+    if (msg.type === "state") {
+      // Rendering replaces main.innerHTML, which destroys the row under the
+      // cursor; the browser then fires mouseenter on its replacement and a new
+      // hover starts by itself. With a state push already in flight that loops,
+      // and the canvas flickers with the mouse completely still. So while a
+      // hover is live we hold the newest state and apply it once it ends.
+      if (S.hoveredId || S.scrolling) { S.pendingState = msg; return; }
+      applyState(msg);
+    } else if (msg.type === "export-data") {
+      handleExport(msg);
+    } else if (msg.type === "export-progress") {
+      showExportProgress(msg);
+    } else if (msg.type === "export-done") {
+      finishExport(msg);
+    } else if (msg.type === "thumb-data") {
+      var turl = bytesToPng(msg.bytes);
+      S.thumbs[msg.nodeId] = turl;
+      // more than one row can be an instance of the same component
+      main.querySelectorAll('[data-thumb="' + msg.nodeId + '"]').forEach(function (im) {
+        im.src = turl;
+        im.style.display = "";
+      });
+    } else if (msg.type === "preview-data") {
+      var url = bytesToPng(msg.bytes);
+      S.previews[msg.nodeId] = url;
+      var img = main.querySelector('[data-prev="' + msg.nodeId + '"]');
+      if (img) { img.src = url; img.style.display = ""; }
+    }
+  };
+
+  function applyState(msg) {
+    {
+      if (msg.lang) S.lang = msg.lang;
+      if (msg.prefs && !S.prefsInit) {
+        if (msg.prefs.heights) S.heights = msg.prefs.heights;
+        if (msg.prefs.thumbs) {
+          if (typeof msg.prefs.thumbs.show === "boolean") S.showThumbs = msg.prefs.thumbs.show;
+          if (msg.prefs.thumbs.size) S.thumbSize = msg.prefs.thumbs.size;
+        }
+        if (msg.prefs.langCols) S.langCols = msg.prefs.langCols;
+        if (typeof msg.prefs.tokenDots === "boolean") S.tokenDots = msg.prefs.tokenDots;
+        S.prefsInit = true;
+      }
+      // Walking the trail keeps every marker on it; picking a different layer
+      // is a fresh start and drops them all. Note that one navigation produces
+      // TWO state pushes — selectionchange fires as the selection is set, and
+      // navNode pushes again — so "same layer as we're already showing" has to
+      // count as no movement, or the second push wipes the trail.
+      var sameNode = !!(S.node && msg.node && msg.node.id === S.node.id);
+      var onTarget = !!(S.navTarget && msg.node && msg.node.id === S.navTarget);
+      recordHistory(msg.node);
+      if (!sameNode && !onTarget) S.origins = {};
+      // The suppression belongs to the layer Forward landed on, and one
+      // navigation pushes twice, so it survives until the selection moves on.
+      if (!msg.node || msg.node.id !== S.noMark) S.noMark = null;
+
+      S.selection = msg.selection;
+      S.node = msg.node || null;
+      S.pinned = !!msg.pinned;
+      S.count = msg.count || 0;
+      S.error = msg.error || "";
+      if (S.node && S.node.id !== S.lastId) {
+        S.detail = {};
+        S.pickedId = null;
+        S.iconPage = 0;
+        S.exportInner = true;
+        S.lastId = S.node.id;
+      }
+      // Export settings belong to the layer, so reseed when the layer changes.
+      if (S.node && S.exportFor !== S.node.id) {
+        S.exportRows = (S.node.exportSettings && S.node.exportSettings.length)
+          ? S.node.exportSettings.map(function (r) { return Object.assign({}, r); })
+          : [defaultExportRow(0)];
+        S.exportFor = S.node.id;
+      }
+      // Collapsed/expanded rows survive selection changes inside the same tree;
+      // they only reset once the tree re-roots somewhere else.
+      var rootId = S.node && S.node.tree ? S.node.tree.rootId : null;
+      if (rootId !== S.lastTreeRoot) {
+        S.treeOpen = {};
+        S.treeGen++;
+        S.lastPathId = null;
+        S.lastTreeRoot = rootId;
+      }
+      applyLang();
+    }
+  }
+
+  /* ---------------- render ---------------- */
+
+  function render() {
+    renderNavbar();
+    renderBody();
+  }
+
+  // The tab bar is part of the panel, not part of the selection: switching
+  // layers — or deselecting entirely — leaves you on the tab you were on, and
+  // each tab answers for itself with an empty state.
+  function renderBody() {
+    hideTip();
+    cancelHover();
+    var d = (S.selection === "node" && S.node) ? S.node : null;
+
+    var body = tabBody(d);
+    if (d && d.warnings && d.warnings.length) {
+      body += '<div class="muted" style="margin-top:12px;font-size:11px">⚠ ' +
+        d.warnings.map(esc).join("<br>⚠ ") + "</div>";
+    }
+
+    var h =
+      '<div class="top-fixed">' + structureBlock(d) + "</div>" +
+      tabsHtml(d, tabCounts(d)) +
+      '<div class="tabbody" data-tabbody>' + body + "</div>";
+
+    // Replacing innerHTML throws away scrollTop; without this, a re-render
+    // triggered mid-scroll (a queued state flushing, say) snaps the tree and
+    // the tab body back to the top.
+    var scrolls = captureScroll();
+    main.innerHTML = h;
+    restoreScroll(scrolls);
+    wire(d);
+  }
+
+  function captureScroll() {
+    var out = {};
+    main.querySelectorAll("[data-rbox]").forEach(function (el) {
+      out["r:" + el.getAttribute("data-rbox")] = el.scrollTop;
+    });
+    var tb = main.querySelector("[data-tabbody]");
+    if (tb) out.tab = tb.scrollTop;
+    return out;
+  }
+
+  function restoreScroll(pos) {
+    main.querySelectorAll("[data-rbox]").forEach(function (el) {
+      var v = pos["r:" + el.getAttribute("data-rbox")];
+      if (v) el.scrollTop = v;
+    });
+    var tb = main.querySelector("[data-tabbody]");
+    if (tb && pos.tab) tb.scrollTop = pos.tab;
+  }
+
+  function tabBody(d) {
+    if (!d) {
+      if (S.selection === "multiple") return emptyState(t("multipleTitle"), t("multipleBody"));
+      if (S.selection === "error")    return emptyState(t("errorTitle"), S.error);
+      return emptyState(t("nothingTitle"), t("nothingBody"));
+    }
+    if (S.tab === "info")     return headerCard(d);
+    if (S.tab === "language") {
+      return d.translation ? languageTab(d) : emptyState(t("noLangTitle"), t("noLangBody"));
+    }
+    if (S.tab === "icons") {
+      return (d.icons && d.icons.length) ? iconsTab(d) : emptyState(t("noIconsTitle"), t("noIconsBody"));
+    }
+    if (S.tab === "export") {
+      return d.exportable ? exportTab(d) : emptyState(t("noExportTitle"), t("noExportBody"));
+    }
+    return inspectTab(d);
+  }
+
+  function emptyPane(text) {
+    return '<div class="empty-pane">' + esc(text) + "</div>";
+  }
+
+  function emptyState(title, body) {
+    return '<div class="empty"><div class="empty-t">' + esc(title) + "</div>" +
+      (body ? "<div>" + esc(body) + "</div>" : "") + "</div>";
+  }
+
+  // A pane with a user-draggable max height; content scrolls inside it.
+  function rbox(key, inner) {
+    if (!inner) return "";
+    var hgt = S.heights[key] || DEFAULT_HEIGHTS[key];
+    return '<div class="rbox">' +
+      '<div class="rbox-body" data-rbox="' + esc(key) + '" style="height:' + hgt + 'px">' + inner + "</div>" +
+      '<div class="rhandle" data-resize="' + esc(key) + '" title="' + esc(t("dragResize")) + '"></div>' +
+      "</div>";
+  }
+
+  function navArrow(forward) {
+    var d = forward ? "M6 3.5L10.5 8L6 12.5" : "M10 3.5L5.5 8L10 12.5";
+    return '<svg viewBox="0 0 16 16"><path d="' + d + '" fill="none" stroke="currentColor" ' +
+      'stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  }
+
+  function renderNavbar() {
+    var nav = $("navbar");
+    nav.innerHTML =
+      '<button id="navback" class="navbtn"' + (S.back.length ? "" : " disabled") +
+      ' title="' + esc(t("back")) + '">' + navArrow(false) + "</button>" +
+      '<button id="navfwd" class="navbtn"' + (S.fwd.length ? "" : " disabled") +
+      ' title="' + esc(t("forward")) + '">' + navArrow(true) + "</button>" +
+      '<span class="trail">' + esc(S.node ? S.node.name : "") + "</span>";
+    $("navback").onclick = function () { step(S.back, S.fwd, false); };
+    $("navfwd").onclick = function () { step(S.fwd, S.back, true); };
+    // Language toggle: header, right end — the same spot in every plugin.
+    var lt = $("langtoggle");
+    lt.innerHTML =
+      '<button class="lang-btn' + (S.lang === "ko" ? " active" : "") + '" data-lang="ko">한국어</button>' +
+      '<button class="lang-btn' + (S.lang === "en" ? " active" : "") + '" data-lang="en">EN</button>';
+    lt.querySelectorAll("[data-lang]").forEach(function (el) {
+      el.onclick = function () { setLang(el.getAttribute("data-lang")); };
+    });
+  }
+
+  // Move one entry between the two history stacks, browser-style. focus:true —
+  // stepping through history lands on layers that are usually off-screen, so
+  // the viewport follows, the same as Go to Main Component.
+  function step(from, to, forward) {
+    var target = from.pop();
+    if (!target) return;
+    settleScroll();
+    if (S.node) to.push({ id: S.node.id, name: S.node.name });
+    S.navTarget = target.id;
+    // Back returns you to somewhere you left, so "you went on from here" is
+    // worth pointing at. Forward moves toward where you had already gone —
+    // there is nothing to point back at, so it lands unmarked.
+    S.noMark = forward ? target.id : null;
+    post({ type: "nav-node", nodeId: target.id, focus: true });
+  }
+
+  // Opening something from the tree also selects it on the canvas, so the state
+  // comes back through selectionchange.
+  // keepTree is set only by rows inside the structure tree: browsing the tree
+  // shouldn't re-root it, but selecting a layer anywhere else should.
+  // focus moves the canvas viewport, which only "Go to Main Component" wants —
+  // every other row leaves the camera alone.
+  function navTo(id, keepTree, focus) {
+    if (!id || (S.node && id === S.node.id)) return;
+    settleScroll();
+    if (S.node) { S.back.push({ id: S.node.id, name: S.node.name }); S.fwd = []; }
+    S.navTarget = id;
+    S.noMark = null;            // a fresh move, not a step forward
+    post({ type: "nav-node", nodeId: id, keepTree: !!keepTree, focus: !!focus });
+  }
+
+  // Every node we land on becomes a history entry, however we got there —
+  // clicking the tree, or just selecting a different layer on the canvas.
+  function recordHistory(newNode) {
+    // Deselecting ends the session's trail — nothing to go back to.
+    if (!newNode) { S.back = []; S.fwd = []; S.navTarget = null; return; }
+    // A repeat push for the layer already on screen isn't a move. Leaving it
+    // alone matters: one navigation pushes twice (selectionchange, then
+    // navNode), and treating the second as a move logs a duplicate entry, which
+    // is what makes Back appear to skip a step.
+    if (S.node && S.node.id === newNode.id) return;
+    if (S.navTarget && newNode.id === S.navTarget) {
+      S.navTarget = null;      // a deliberate back/forward/tree move; stacks already set
+      return;
+    }
+    S.navTarget = null;
+    if (S.node) {
+      S.back.push({ id: S.node.id, name: S.node.name });
+      S.fwd = [];
+    }
+  }
+
+  /* --- building blocks --- */
+
+  function sec(id, title, bodyHtml, countLabel, actionsHtml) {
+    if (!bodyHtml) return "";
+    var closed = !S.open[id];
+    return '<div class="sec">' +
+      '<div class="sec-head' + (closed ? " closed" : "") + '" data-sec="' + id + '">' +
+      '<span class="caret">▾</span><span>' + esc(title) + "</span>" +
+      (countLabel ? ' <span class="sc">' + esc(countLabel) + "</span>" : "") +
+      (actionsHtml ? '<span class="sec-actions">' + actionsHtml + "</span>" : "") +
+      "</div>" +
+      '<div class="sec-body' + (closed ? " hidden" : "") + '" data-secbody="' + id + '">' +
+      bodyHtml + "</div></div>";
+  }
+
+  function rowsHtml(rows) {
+    if (!rows || !rows.length) return "";
+    var h = "";
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      h += '<div class="prow' + (r.flag ? " flag" : "") + '">' +
+        '<span class="pk">' + esc(r.raw ? r.k : lbl(r.k)) + "</span>" +
+        '<span class="pv"><span class="copy" data-copy="' + esc(r.c !== undefined ? r.c : r.v) + '">' + esc(val(r.v)) + "</span>" +
+        (r.tok ? tokHtml(r.tok) : "") + "</span></div>";
+    }
+    return h;
+  }
+
+  // Figma groups variables with slashes; most code-side token systems address
+  // them with dots. The copied value follows the display, since pasting into
+  // code is the whole point of the pill — the tooltip keeps the Figma path so
+  // the original name is never lost.
+  function tokenFormat(name, dots) {
+    var s = String(name === null || name === undefined ? "" : name);
+    return dots ? s.replace(/\//g, ".") : s;
+  }
+
+  function tokenName(name) { return tokenFormat(name, S.tokenDots); }
+
+  function tokHtml(name) {
+    var shown = tokenName(name);
+    var title = shown === String(name) ? shown : shown + "  ·  " + name;
+    return '<span class="tok copy" data-copy="' + esc(shown) + '" title="' + esc(title) + '">' +
+      esc(shown) + "</span>";
+  }
+
+  function paintsHtml(list, label) {
+    if (!list || !list.length) return "";
+    var h = "";
+    for (var i = 0; i < list.length; i++) {
+      var p = list[i];
+      var name = label + (list.length > 1 ? " " + (i + 1) : "");
+      h += '<div class="prow' + (p.visible === false ? " muted" : "") + '">' +
+        '<span class="pk">' + esc(name) + "</span>" +
+        '<span class="pv">' + (p.kind === "gradient" ? gradientBody(p) : solidBody(p)) +
+        (p.visible === false ? ' <span class="hidden-flag">(' + esc(t("hidden")) + ")</span>" : "") +
+        "</span></div>";
+    }
+    return h;
+  }
+
+  function solidBody(p) {
+    return (p.swatch ? '<span class="sw" style="background:' + esc(p.swatch) + '"></span>' : "") +
+      '<span class="copy mono" data-copy="' + esc(p.swatch || p.summary) + '">' + esc(val(p.summary)) + "</span>" +
+      (p.style ? tokHtml(p.style) : "") +
+      (p.tok ? tokHtml(p.tok) : "");
+  }
+
+  // Gradients need room: the kind on one line, the stops on the next, and the
+  // per-stop tokens on a third — all joined by the same arrow so the columns
+  // line up visually.
+  function gradientBody(p) {
+    var css = "linear-gradient(90deg," + (p.gradient || []).join(",") + ")";
+    var h = '<span class="sw" style="background:' + esc(css) + '"></span>' +
+      '<span>' + esc(val(p.label || "Gradient")) + "</span>" +
+      (p.style ? tokHtml(p.style) : "") +
+      '<div class="pv-line mono copy" data-copy="' + esc(p.summary) + '">' + esc(p.summary) + "</div>";
+    if (p.hasTokens) {
+      h += '<div class="pv-line">' + p.tokens.map(function (tk) {
+        return tk ? tokHtml(tk) : '<span class="tok-none">' + esc(t("noToken")) + "</span>";
+      }).join('<span class="arrow">→</span>') + "</div>";
+    }
+    return h;
+  }
+
+  /* --- node view --- */
+
+  // Hover preview exists only in the Language table: hovering a string row
+  // shows which text layer uses it. Everywhere else, clicking is the way to
+  // reach a layer.
+  function hoverStart(id) {
+    // hoverLock covers scrolling: rows sliding under a stationary pointer fire
+    // mouseenter, which would thrash the canvas selection. Released by real
+    // pointer movement.
+    if (!id || S.hoverLock || S.hoveredId === id) return;
+    S.hoveredId = id;
+    post({ type: "hover-layer", nodeId: id });
+  }
+
+  // Cancel without flushing a queued state (used by render, so applying a
+  // state can't recurse).
+  function cancelHover() {
+    if (!S.hoveredId) return;
+    S.hoveredId = null;
+    post({ type: "hover-end" });
+  }
+
+  function endHover() {
+    cancelHover();
+    if (!S.scrolling) flushPending();
+  }
+
+  // Only act if this row still owns the hover — the browser can fire a
+  // sibling's mouseenter before this row's mouseleave.
+  function hoverStop(id) {
+    if (S.hoveredId !== id) return;
+    endHover();
+  }
+
+  function showTip(el, text) {
+    var tip = $("tip");
+    if (!tip || !text || !el.getBoundingClientRect) return;
+    tip.textContent = text;
+    tip.style.display = "block";
+    var r = el.getBoundingClientRect();
+    var vw = (typeof window !== "undefined" && window.innerWidth) || 400;
+    var left = Math.max(6, Math.min(r.left - 4, vw - tip.offsetWidth - 6));
+    // Prefer above the icon; drop below when there isn't room.
+    var top = r.top - tip.offsetHeight - 6;
+    if (top < 6) top = r.bottom + 6;
+    tip.style.left = left + "px";
+    tip.style.top = top + "px";
+  }
+
+  function hideTip() {
+    var tip = $("tip");
+    if (tip) tip.style.display = "none";
+  }
+
+  function wireExport() {
+    var rows = S.exportRows;
+    if (!rows) return;
+
+    // Every control writes into the row and re-renders; the panel is small
+    // enough that a full re-render is cheaper than surgical DOM updates.
+    function bind(sel, handler) {
+      main.querySelectorAll(sel).forEach(function (el, i) {
+        var row = rows[rowIndexOf(el, i)];
+        if (!row) return;
+        var run = function (ev) { if (ev && ev.stopPropagation) ev.stopPropagation(); handler(row, el); renderBody(); };
+        if (el.tagName === "SELECT" || el.tagName === "INPUT") { el.onchange = run; el.onclick = stop; }
+        else el.onclick = run;
+      });
+    }
+    function stop(ev) { if (ev && ev.stopPropagation) ev.stopPropagation(); }
+    function rowIndexOf(el, fallback) { return fallback; }
+
+    bind("[data-exp-scale]", function (row, el) {
+      var v = el.value;
+      if (v === "W") { row.scaleMode = "WIDTH"; row.scaleValue = row.scaleValue || 100; }
+      else if (v === "H") { row.scaleMode = "HEIGHT"; row.scaleValue = row.scaleValue || 100; }
+      else { row.scaleMode = "SCALE"; row.scaleValue = parseFloat(v); }
+    });
+    bind("[data-exp-scaleval]", function (row, el) { row.scaleValue = parseFloat(el.value) || 1; });
+    bind("[data-exp-format]", function (row, el) {
+      var was = row.format;
+      row.format = el.value;
+      // SVG has options of its own; open the panel so they're not two clicks deep
+      if (row.format === "SVG" && was !== "SVG") row.open = true;
+    });
+    bind("[data-exp-suffix]", function (row, el) { row.suffix = el.value; });
+    bind("[data-exp-profile]", function (row, el) { row.colorProfile = el.value; });
+    bind("[data-exp-resample]", function (row, el) { row.resampling = el.value; });
+    bind("[data-exp-more]", function (row) { row.open = !row.open; });
+    bind("[data-exp-contents]", function (row) { row.contentsOnly = !row.contentsOnly; });
+    bind("[data-exp-patch]", function (row) { row.patchStroke = !row.patchStroke; });
+    bind("[data-exp-label]", function (row) { row.labelParts = !row.labelParts; });
+    bind("[data-exp-hidden]", function (row) { row.dropInvisible = !row.dropInvisible; });
+    bind("[data-exp-clip]", function (row) { row.cleanClip = !row.cleanClip; });
+    bind("[data-exp-svgid]", function (row) { row.svgIdAttribute = !row.svgIdAttribute; });
+    bind("[data-exp-svgstroke]", function (row) { row.svgSimplifyStroke = !row.svgSimplifyStroke; });
+    bind("[data-exp-svgtext]", function (row) { row.svgOutlineText = !row.svgOutlineText; });
+
+    main.querySelectorAll("[data-exp-del]").forEach(function (el, i) {
+      el.onclick = function (ev) {
+        stop(ev);
+        rows.splice(i, 1);
+        renderBody();
+      };
+    });
+
+    var add = main.querySelector("[data-export-add]");
+    if (add) add.onclick = function (ev) { stop(ev); rows.push(defaultExportRow(rows.length)); renderBody(); };
+
+    var prev = main.querySelector("[data-export-preview]");
+    if (prev) prev.onclick = function (ev) { stop(ev); S.exportPreview = !S.exportPreview; renderBody(); };
+
+    var inner = main.querySelector("[data-export-inner]");
+    if (inner) inner.onclick = function (ev) { stop(ev); S.exportInner = !S.exportInner; renderBody(); };
+
+    var run = main.querySelector("[data-export-run]");
+    if (run && S.node) {
+      run.onclick = function (ev) {
+        stop(ev);
+        var target = exportTarget(S.node);
+        post({ type: "export-run", runId: startRun("download", safeFile(target.name)),
+               nodeId: target.id, rows: rows.map(function (r) {
+          return {
+            format: r.format, scaleMode: r.scaleMode, scaleValue: r.scaleValue,
+            suffix: r.suffix, contentsOnly: r.contentsOnly,
+            colorProfile: r.colorProfile, resampling: r.resampling,
+            svgIdAttribute: r.svgIdAttribute,
+            svgOutlineText: r.svgOutlineText,
+            svgSimplifyStroke: r.svgSimplifyStroke,
+            patchStroke: r.patchStroke,
+            labelParts: r.labelParts,
+            dropInvisible: r.dropInvisible,
+            cleanClip: r.cleanClip,
+          };
+        }) });
+      };
+    }
+  }
+
+  function savePrefs() {
+    post({ type: "set-prefs", prefs: {
+      heights: S.heights,
+      thumbs: { show: S.showThumbs, size: S.thumbSize },
+      langCols: S.langCols,
+      tokenDots: S.tokenDots,
+    } });
+  }
+
+  function flushPending() {
+    if (!S.pendingState) return;
+    var m = S.pendingState;
+    S.pendingState = null;
+    applyState(m);
+  }
+
+  // Selecting a layer from a row never re-points the panel — the main thread
+  // swallows that selectionchange — so the canvas is the only feedback. Mark
+  // the clicked row too, so the panel shows which one you picked.
+  function pickLayer(raw, el) {
+    if (!raw) return;
+    S.pickedId = raw;   // the whole list, so the row marker matches on re-render
+    // Clicking marks the row immediately instead of waiting for a re-render, so
+    // this has to enforce the single-highlight rule too: clearing only .picked
+    // would leave the previous selection's green sitting next to the new one.
+    if (el && el.classList) {
+      main.querySelectorAll(".picked").forEach(function (p) { p.classList.remove("picked"); });
+      main.querySelectorAll(".trow").forEach(function (p) {
+        p.classList.remove("self");
+        p.classList.remove("origin");
+      });
+      el.classList.add("picked");
+    }
+    post({ type: "select-layer", nodeIds: raw.split(",") });
+  }
+
+  // A click means any in-progress scroll is over, so a fresh state can render.
+  function settleScroll() {
+    cancelHover();
+    S.pendingState = null;
+    S.scrolling = false;
+    if (S.scrollTimer) { clearTimeout(S.scrollTimer); S.scrollTimer = null; }
+  }
+
+  /* --- tabs --- */
+
+  function tabCounts(d) {
+    if (!d) return { language: 0, icons: 0 };
+    return {
+      language: d.translation ? d.translation.rows.length : 0,
+      icons:    d.icons ? d.icons.length : 0,
+    };
+  }
+
+  function tabsHtml(d, c) {
+    var defs = [
+      ["info", t("tabInfo"), null],
+      ["inspect", t("tabInspect"), null],
+      ["language", t("tabLanguage"), c.language],
+      ["icons", t("tabIcons"), c.icons],
+      ["export", t("tabExport"), null],
+    ];
+    return '<div class="tabs">' + defs.map(function (def) {
+      var id = def[0], count = def[2];
+      return '<button class="tab' + (S.tab === id ? " active" : "") + '" data-tab="' + id + '">' +
+        esc(def[1]) + (count ? '<span class="tb">' + count + "</span>" : "") + "</button>";
+    }).join("") + "</div>";
+  }
+
+  /* --- tab bodies --- */
+
+  function inspectTab(d) {
+    var h = tokenOptsHtml();
+    h += sec("scroll", t("secScroll"), scrollHtml(d));
+    h += sec("layout", t("secLayout"), layoutHtml(d));
+    h += sec("typography", t("secTypography"), typeHtml(d));
+    h += sec("content", t("secContent"), contentHtml(d));
+    h += sec("appearance", t("secAppearance"), appearanceHtml(d));
+    h += sec("colors", t("secColors"), colorsHtml(d), colorsCount(d));
+    h += sec("effects", t("secEffects"), effectsHtml(d), effectsCount(d));
+    h += sec("grids", t("secGrids"), gridsHtml(d));
+    h += sec("modes", t("secModes"), d.modes ? rowsHtml(d.modes) : "");
+    return h;
+  }
+
+  // Both options are spelled out rather than described, so choosing is a
+  // comparison instead of a guess: each button IS its format. The labels come
+  // from the same formatter the pills use, so the control can never advertise
+  // something the panel doesn't do.
+  var TOKEN_EXAMPLE = "group/sub-group/token";
+
+  function tokenOptsHtml() {
+    function seg(dots) {
+      return '<button class="seg-btn' + (S.tokenDots === dots ? " active" : "") +
+        '" data-tok-fmt="' + (dots ? "dot" : "slash") + '">' +
+        esc(tokenFormat(TOKEN_EXAMPLE, dots)) + "</button>";
+    }
+    return '<div class="tok-opts">' +
+      '<div class="tok-opts-head">' + esc(t("tokenFmtHead")) + infoIcon(t("tokenFmtTip")) + "</div>" +
+      '<div class="seg">' + seg(true) + seg(false) + "</div></div>";
+  }
+
+  function structureBlock(d) {
+    var body = d ? structureHtml(d) : emptyPane(t("noSelection"));
+    var n = d && d.tree ? d.tree.count : 0;
+    var actions = n ? thumbControls() + collapseAllBtn() : "";
+    return sec("structure", t("secStructure"), rbox("structure", body), n ? String(n) : "", actions);
+  }
+
+  function thumbControls() {
+    return (S.showThumbs
+        ? '<input class="thumb-size" type="range" min="16" max="72" step="4" value="' + S.thumbSize +
+          '" data-thumb-size title="' + esc(t("thumbSize")) + '" />'
+        : "") +
+      '<span class="hcheck' + (S.showThumbs ? " on" : "") + '" data-thumb-toggle title="' +
+      esc(t("thumbToggle")) + '"><span class="box">' + (S.showThumbs ? "✓" : "") + "</span>" +
+      esc(t("thumbLabel")) + "</span>";
+  }
+
+  function iconsTab(d) {
+    var n = d.icons && d.icons.length ? d.icons.length : 0;
+    if (!n) return sec("icons", t("secIcons"), iconsHtml(d), "", "");
+    var a = iconAllOpts();
+    // The section header is sticky, so the whole cluster stays put while the
+    // card list scrolls under it.
+    var actions =
+      '<select data-all-scale class="mini"' + (a.fmt === "SVG" || a.fmt === "PDF" ? " disabled" : "") + ">" +
+      [1, 2, 3, 4].map(function (m) {
+        return '<option value="' + m + '"' + (m === a.scale ? " selected" : "") + ">" + m + "×</option>";
+      }).join("") + "</select>" +
+      '<select data-all-fmt class="mini">' +
+      ["SVG", "PNG", "JPG", "PDF"].map(function (f) {
+        return '<option value="' + f + '"' + (f === a.fmt ? " selected" : "") + ">" + f + "</option>";
+      }).join("") + "</select>" +
+      '<button class="xs ghost dots' + (a.open ? " on" : "") + '" data-all-more title="' +
+      esc(t("exportSettings")) + '">•••</button>' +
+      '<button class="xs primary" data-export-all' + (S.exporting ? " disabled" : "") + ">" +
+      esc(S.exporting ? t("exportingN")(S.exporting.done, S.exporting.total) : t("exportAll")) +
+      "</button>";
+    // The options panel can't live in the sticky header without overlapping the
+    // list, so it opens as the first thing in the body, right beneath it.
+    var body = (a.open ? '<div class="all-opts">' + iconAllOptsHtml(a) + "</div>" : "") +
+      (d.iconsTruncated
+        ? '<div class="muted" style="padding:2px 2px 8px">' + esc(t("iconsTruncated")(n)) + "</div>"
+        : "") +
+      iconPagerHtml(d) + iconsHtml(d);
+    return sec("icons", t("secIcons"), body, String(n), actions);
+  }
+
+  function iconAllOptsHtml(a) {
+    return '<div class="exp-more">' +
+      '<div class="exp-more-t">' + esc(t("exportAllSettings")) + "</div>" +
+      expCheck("data-all-patch", a.patchStroke, t("svgPatch"), t("svgPatchTip")) +
+      expCheck("data-all-label", a.labelParts, t("svgLabel"), t("svgLabelTip")) +
+      expCheck("data-all-hidden", a.dropInvisible, t("svgDropHidden"), t("svgDropHiddenTip")) +
+      expCheck("data-all-clip", a.cleanClip, t("svgCleanClip"), t("svgCleanClipTip")) +
+      expCheck("data-all-svgid", a.svgIdAttribute, t("svgId"), t("svgIdTip")) +
+      expCheck("data-all-svgstroke", a.svgSimplifyStroke, t("svgSimplify"), t("svgSimplifyTip")) +
+      expCheck("data-all-svgtext", a.svgOutlineText, t("svgOutlineText"), t("svgOutlineTextTip")) +
+      expCheck("data-all-contents", a.contentsOnly, t("ignoreOverlap"), t("ignoreOverlapTip")) +
+      "</div>";
+  }
+
+  function languageTab(d) {
+    return sec("language", t("secLanguage"), translationHtml(d),
+      d.translation ? d.translation.collection : "");
+  }
+
+  function headerCard(d) {
+    var h = '<div class="var-head">' +
+      '<div class="leaf copy" data-copy="' + esc(d.name) + '">' + esc(d.name) + "</div>";
+
+    if (d.main && !d.main.missing) {
+      h += '<div class="grp">' + esc(t("instanceOf")) +
+        '<span class="copy" data-copy="' + esc(d.main.name) + '"><b>' + esc(d.main.name) + "</b></span>" +
+        (d.main.variant ? " · " + esc(d.main.variant) : "") +
+        (d.main.remote ? " · " + esc(t("library")) : "") + "</div>";
+    } else if (d.main && d.main.missing) {
+      h += '<div class="grp">' + esc(t("detached")) + "</div>";
+    }
+
+    h += '<div class="badges">';
+    for (var i = 0; i < d.badges.length; i++) {
+      h += '<span class="badge' + (i === 0 ? " b-main" : "") + '">' + esc(val(d.badges[i])) + "</span>";
+    }
+    if (d.main && d.main.remote) h += '<span class="text-badge">' + esc(t("external")) + "</span>";
+    h += "</div>";
+
+    if (d.main && d.main.id && !d.main.missing && !d.main.remote && !d.main.isSelf) {
+      h += '<div class="head-actions"><button class="sm" data-focus="1" data-nav="' + esc(d.main.id) + '">' +
+        esc(t("mainBtn")) + "</button></div>";
+    }
+
+    if (d.description) h += '<div class="desc">' + esc(d.description) + "</div>";
+
+    // Properties sit under the description, folded away by default.
+    if (d.props && d.props.length) {
+      h += '<div class="hp">' +
+        '<button class="xs ghost" data-props-toggle>' +
+        (S.propsOpen ? "▾ " : "▸ ") + esc(t("secProps")) + " (" + d.props.length + ")" +
+        "</button>" +
+        (S.propsOpen ? '<div class="hp-body">' + propsHtml(d) + "</div>" : "") +
+        "</div>";
+    }
+
+    h += "</div>";
+    return h;
+  }
+
+  /* --- component structure (wiki-style contents) --- */
+
+  // key is what the thumbnail is OF (the main component, so instances of the
+  // same component share one export); fromId is the row's own node, used to
+  // resolve the component when it can't be reached by id.
+  function thumbBox(key, fromId) {
+    var src = S.thumbs[key];
+    var px = S.thumbSize;
+    return '<span class="tthumb" style="width:' + px + "px;height:" + px + 'px">' +
+      '<img data-thumb="' + esc(key) + '" data-thumb-from="' + esc(fromId) + '"' +
+      (src ? ' src="' + src + '"' : ' style="display:none"') + " /></span>";
+  }
+
+  // Only rows actually on screen are exported, and only once — the cache is
+  // keyed by node, and the display size is pure CSS.
+  function requestThumbs() {
+    if (!S.showThumbs) return;
+    var imgs = main.querySelectorAll("[data-thumb]");
+    var asked = 0;
+    for (var i = 0; i < imgs.length && asked < 40; i++) {
+      var id = imgs[i].getAttribute("data-thumb");
+      if (S.thumbs[id] || S.thumbAsked[id]) continue;
+      S.thumbAsked[id] = true;
+      asked++;
+      post({ type: "thumb", nodeId: id, fromId: imgs[i].getAttribute("data-thumb-from") });
+    }
+  }
+
+  function infoIcon(text) {
+    return '<span class="tinfo" data-tip="' + esc(text) + '">' +
+      '<svg viewBox="0 0 12 12">' +
+      '<circle cx="6" cy="6" r="5" fill="none" stroke="currentColor" stroke-width="1.2"/>' +
+      '<rect x="5.4" y="5.1" width="1.2" height="3.9" rx=".6" fill="currentColor"/>' +
+      '<circle cx="6" cy="3.3" r=".8" fill="currentColor"/></svg></span>';
+  }
+
+  function treeIsOpen(e) {
+    return S.treeOpen[e.id] !== undefined ? S.treeOpen[e.id] : false;
+  }
+
+  function collapseAllBtn() {
+    // Icon rather than a label: the header is narrow and shares space with the
+    // thumbnail controls.
+    return '<button class="xs ghost icon-btn" data-collapse-tree title="' + esc(t("collapseAll")) + '">' +
+      '<svg viewBox="0 0 14 14">' +
+      '<path d="M1.4 3h8M1.4 7h5.8M1.4 11h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>' +
+      '<path d="M9.4 8.6l3.2 3.2M12.6 8.6l-3.2 3.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>' +
+      "</svg></button>";
+  }
+
+  // Decided once per render by structureHtml and read by treeRowHtml, which
+  // runs synchronously underneath it. Exactly ONE row is ever highlighted, and
+  // the most recent intent wins: a Go to Main Component marker, else the row
+  // you clicked to select on canvas, else the inspected layer itself. They are
+  // genuinely different rows — the panel keeps inspecting one layer while the
+  // canvas selection moves to another — so without a single winner the tree
+  // shows two selections at once.
+  var originId = null;   // marker for this tree, if any
+  var hlId = null;       // the row that gets the highlight
+  var hlClass = "";      // which highlight it gets
+
+  function treeHas(e, id) {
+    if (e.id === id) return true;
+    var kids = e.children || [];
+    for (var i = 0; i < kids.length; i++) if (treeHas(kids[i], id)) return true;
+    return false;
+  }
+
+  function structureHtml(d) {
+    if (!d.tree) return "";
+    var root = d.tree.root;
+
+    // Reveal the selected layer when it changes, but leave the user's own
+    // collapsing alone on every other render.
+    if (d.id !== S.lastPathId) {
+      openPathTo(root);
+      S.lastPathId = d.id;
+    }
+
+    // Back on a tree we left: reveal the instance whose Go to Main Component we
+    // followed. Highlighted only — the canvas selection stays where it is.
+    // Re-expanded once per re-root, since re-rooting clears treeOpen; after that
+    // the user's own collapsing stands.
+    originId = null;
+    var mo = S.noMark === d.id ? null : S.origins[d.tree.rootId];
+    if (mo) {
+      originId = mo.id;
+      if (mo.gen !== S.treeGen) { openPathToId(root, mo.id); mo.gen = S.treeGen; }
+    }
+
+    hlId = null; hlClass = "";
+    if (originId) { hlId = originId; hlClass = "origin"; }
+    // A pick outside this tree (a colour swatch, say) leaves the tree's own
+    // highlight alone rather than blanking it.
+    else if (S.pickedId && treeHas(root, S.pickedId)) { hlId = S.pickedId; hlClass = "picked"; }
+
+    // The anchored layer itself isn't listed — only its contents.
+    if (!(root.children || []).length) {
+      return '<div class="muted" style="padding:2px">' + esc(t("noNested")) + "</div>";
+    }
+    var h = kidsHtml(root.children);
+    if (d.tree.truncated) h += '<div class="muted" style="padding:6px 6px 0">' + esc(t("truncatedList")) + "</div>";
+    return h;
+  }
+
+  // Same, for an arbitrary node id rather than the selected one.
+  function openPathToId(e, id) {
+    if (e.id === id) return true;
+    var found = false;
+    var kids = e.children || [];
+    for (var i = 0; i < kids.length; i++) {
+      if (openPathToId(kids[i], id)) { S.treeOpen[e.id] = true; found = true; }
+    }
+    return found;
+  }
+
+  // Expand every ancestor of the current node so the highlight is visible.
+  function openPathTo(e) {
+    if (e.current) return true;
+    var found = false;
+    var kids = e.children || [];
+    for (var i = 0; i < kids.length; i++) {
+      if (openPathTo(kids[i])) { S.treeOpen[e.id] = true; found = true; }
+    }
+    return found;
+  }
+
+  function kidsHtml(kids) {
+    return kids.map(function (c) {
+      var h = treeRowHtml(c);
+      if ((c.children || []).length && treeIsOpen(c)) {
+        h += '<div class="tkids">' + kidsHtml(c.children) + "</div>";
+      }
+      return h;
+    }).join("");
+  }
+
+  function treeRowHtml(e) {
+    var glyph = e.type === "COMPONENT_SET" ? "◈" : (e.type === "COMPONENT" ? "◆" : (e.icon ? "★" : "◇"));
+    var kids = (e.children || []).length;
+    var open = treeIsOpen(e);
+    // Only the selected layer is highlighted; every other row, root included,
+    // stays clickable so you can walk back up the structure.
+    var hl = hlId ? (e.id === hlId ? " " + hlClass : "") : (e.current ? " self" : "");
+    return '<div class="trow' + (e.current ? " current" : "") + hl + '"' +
+      (kids ? ' data-expand="' + esc(e.id) + '"' : "") +
+      (e.current ? "" : ' data-pick="' + esc(e.id) + '" title="' + esc(t("selectOnCanvas")) + '"') + ">" +
+      '<span class="tcaret' + (kids ? (open ? "" : " closed") : " leaf") + '"' +
+      (kids ? ' data-tree="' + esc(e.id) + '"' : "") + ">▾</span>" +
+      '<span class="tglyph">' + glyph + "</span>" +
+      (S.showThumbs ? thumbBox(e.thumbId || e.id, e.id) : "") +
+      '<span class="tname">' + esc(e.name) + "</span>" +
+      (e.slot ? '<span class="tslot">' + esc(t("slot")) + infoIcon(t("slotTip")) + "</span>" : "") +
+      (e.isVariant ? '<span class="tvariant" title="' + esc(t("variantTip")) + '">' +
+        esc(t("variantBadge")) + "</span>" : "") +
+      (kids && !open ? '<span class="tcount">' + kids + "</span>" : "") +
+      (e.hidden ? '<span class="thidden">' + esc(t("hidden")) + "</span>" : "") +
+      // A component from another file has no main component to jump to here.
+      (e.remote
+        ? '<span class="text-badge">' + esc(t("external")) + "</span>"
+        // A variant has no main component to jump to — it IS one — so the row
+        // offers to go to the variant itself, camera and all.
+        : e.isVariant
+          ? '<button class="xs tmain" style="white-space:nowrap" data-focus="1" data-nav="' +
+            esc(e.id) + '" data-nav-from="' + esc(e.id) + '">' + esc(t("variantBtn")) + "</button>"
+        : (e.mainId ? '<button class="xs tmain" style="white-space:nowrap" data-focus="1" data-nav="' +
+            esc(e.mainId) + '" data-nav-from="' + esc(e.id) + '">' + esc(t("mainBtn")) + "</button>" : "")) +
+      "</div>";
+  }
+
+  /* --- export: a mirror of Figma's own Export panel --- */
+
+  var SCALE_STEPS = [0.5, 0.75, 1, 1.5, 2, 3, 4];
+
+  // Figma pre-fills @2x, @3x… as you add rows; match that.
+  function defaultExportRow(i) {
+    var mult = i + 1;
+    return {
+      format: "PNG", scaleMode: "SCALE", scaleValue: mult,
+      suffix: mult > 1 ? "@" + mult + "x" : "",
+      contentsOnly: true, colorProfile: "SRGB",
+      resampling: "BASIC",   // Basic rather than Figma's Detailed default
+      svgIdAttribute: true,  // layer names become id attributes
+      svgOutlineText: false,
+      svgSimplifyStroke: true,
+      patchStroke: true,     // repair the stroke-width Figma omits on groups
+      labelParts: true,      // name the split fill/stroke paths
+      dropInvisible: true,   // leave out layers parked at 0% opacity
+      cleanClip: true,       // drop the clip path that only repeats the canvas
+      open: false,
+    };
+  }
+
+  function opts(list, cur) {
+    return list.map(function (o) {
+      return '<option value="' + esc(o[0]) + '"' + (String(o[0]) === String(cur) ? " selected" : "") +
+        ">" + esc(o[1]) + "</option>";
+    }).join("");
+  }
+
+  function exportTab(d) {
+    var rows = S.exportRows || [defaultExportRow(0)];
+    var h = '<div class="sec"><div class="sec-head" data-sec="export">' +
+      '<span class="caret">▾</span><span>' + esc(t("secExport")) + "</span>" +
+      '<span class="sec-actions"><button class="xs ghost icon-btn" data-export-add title="' +
+      esc(t("addExport")) + '"><svg viewBox="0 0 14 14">' +
+      '<path d="M7 2.4v9.2M2.4 7h9.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>' +
+      "</svg></button></span></div>" +
+      '<div class="sec-body' + (S.open.export === false ? " hidden" : "") + '" data-secbody="export">';
+
+    for (var i = 0; i < rows.length; i++) h += exportRowHtml(rows[i], i, rows.length);
+
+    // Selecting the wrapper and exporting it gives you its layout box and a
+    // root <g id="icon-frame">. The asset inside is what carries the real name.
+    var target = exportTarget(d);
+    if (d.exportAsset) {
+      h += '<span class="hcheck' + (S.exportInner ? " on" : "") + '" data-export-inner' +
+        ' title="' + esc(t("exportInnerTip")) + '" style="margin-top:10px">' +
+        '<span class="box">' + (S.exportInner ? "✓" : "") + "</span>" +
+        esc(t("exportInner")(d.exportAsset.name)) + "</span>";
+    }
+    h += '<button class="primary full" style="margin-top:10px" data-export-run>' +
+      esc(t("exportNamed")(target.name)) + "</button>";
+
+    // Preview reuses the thumbnail export, so it costs nothing extra.
+    h += '<div class="exp-preview">' +
+      '<button class="xs ghost" data-export-preview>' + (S.exportPreview ? "▾ " : "▸ ") +
+      esc(t("preview")) + "</button>" +
+      (S.exportPreview
+        ? '<div class="exp-preview-box">' + thumbImg(d.id) + "</div>"
+        : "") +
+      "</div></div></div>";
+    return h;
+  }
+
+  // Which layer the Export tab acts on: the icon inside the wrapper when there
+  // is one and the option is on, otherwise the selection itself.
+  function exportTarget(d) {
+    return (d.exportAsset && S.exportInner) ? d.exportAsset : { id: d.id, name: d.name };
+  }
+
+  function thumbImg(id) {
+    var src = S.thumbs[id];
+    return '<img class="exp-preview-img" data-thumb="' + esc(id) + '" data-thumb-from="' + esc(id) + '"' +
+      (src ? ' src="' + src + '"' : ' style="display:none"') + " />";
+  }
+
+  function expCheck(attr, on, label, tip) {
+    return '<span class="hcheck' + (on ? " on" : "") + '" ' + attr +
+      (tip ? ' title="' + esc(tip) + '"' : "") + ' style="margin-top:4px">' +
+      '<span class="box">' + (on ? "✓" : "") + "</span>" + esc(label) + "</span>";
+  }
+
+  function exportRowHtml(r, i, total) {
+    var raster = r.format === "PNG" || r.format === "JPG";
+    var scaleOpts = SCALE_STEPS.map(function (v) { return [v, v + "×"]; })
+      .concat([["W", t("widthMode")], ["H", t("heightMode")]]);
+    var cur = r.scaleMode === "SCALE" ? r.scaleValue : (r.scaleMode === "WIDTH" ? "W" : "H");
+
+    var h = '<div class="exp-row" data-exp-row="' + i + '">' +
+      '<select data-exp-scale' + (raster ? "" : " disabled") + ">" + opts(scaleOpts, cur) + "</select>" +
+      (raster && r.scaleMode !== "SCALE"
+        ? '<input class="exp-num" type="number" min="1" value="' + esc(r.scaleValue) + '" data-exp-scaleval />'
+        : "") +
+      '<select class="grow" data-exp-format>' +
+      opts([["PNG", "PNG"], ["JPG", "JPG"], ["SVG", "SVG"], ["PDF", "PDF"]], r.format) + "</select>" +
+      '<button class="xs ghost dots' + (r.open ? " on" : "") + (r.format === "SVG" ? " has-opts" : "") +
+      '" data-exp-more title="' + esc(t("exportSettings")) + '">•••</button>' +
+      (total > 1
+        ? '<button class="xs ghost" data-exp-del title="' + esc(t("removeExport")) + '">—</button>'
+        : "") +
+      "</div>";
+
+    if (r.open) {
+      h += '<div class="exp-more">' +
+        '<div class="prow"><span class="pk">' + esc(t("suffix")) + "</span>" +
+        '<span class="pv"><input type="text" class="exp-suffix" value="' + esc(r.suffix || "") +
+        '" placeholder="' + esc(t("none")) + '" data-exp-suffix /></span></div>' +
+        (raster
+          ? '<div class="prow"><span class="pk">' + esc(t("colorProfile")) + "</span>" +
+            '<span class="pv"><select data-exp-profile>' +
+            opts([["SRGB", "sRGB"], ["DOCUMENT", t("documentProfile")], ["DISPLAY_P3_V4", "Display P3"]], r.colorProfile) +
+            "</select></span></div>" +
+            '<div class="prow"><span class="pk">' + esc(t("resampling")) + "</span>" +
+            '<span class="pv"><select data-exp-resample>' +
+            opts([["BASIC", t("basic")], ["DETAILED", t("detailed")]], r.resampling) +
+            "</select></span></div>"
+          : "") +
+        (r.format === "SVG"
+          ? '<div class="exp-checks">' +
+            expCheck("data-exp-patch", r.patchStroke, t("svgPatch"), t("svgPatchTip")) +
+            expCheck("data-exp-label", r.labelParts, t("svgLabel"), t("svgLabelTip")) +
+            expCheck("data-exp-hidden", r.dropInvisible, t("svgDropHidden"), t("svgDropHiddenTip")) +
+            expCheck("data-exp-clip", r.cleanClip, t("svgCleanClip"), t("svgCleanClipTip")) +
+            expCheck("data-exp-svgid", r.svgIdAttribute, t("svgId"), t("svgIdTip")) +
+            expCheck("data-exp-svgstroke", r.svgSimplifyStroke, t("svgSimplify"), t("svgSimplifyTip")) +
+            expCheck("data-exp-svgtext", r.svgOutlineText, t("svgOutlineText"), t("svgOutlineTextTip")) +
+            "</div>"
+          : "") +
+        expCheck("data-exp-contents", r.contentsOnly, t("ignoreOverlap"), t("ignoreOverlapTip")) +
+        "</div>";
+    }
+    return h;
+  }
+
+  /* --- icons: same controls as Figma's export panel, minus having to select
+         the icon layer itself --- */
+
+  // Icon cards get the same settings the Export tab has — previously they were
+  // stuck on hardcoded defaults with no way to reach them.
+  // The Export all controls: the same set a single card offers, applied to the
+  // whole list. Changing one writes through to every card, so the cards stay
+  // the single visible source of truth for what will be exported.
+  function iconAllOpts() {
+    if (!S.iconAll) {
+      S.iconAll = {
+        fmt: "SVG", scale: 2, contentsOnly: true, svgIdAttribute: true,
+        svgSimplifyStroke: true, svgOutlineText: false,
+        patchStroke: true, labelParts: true, dropInvisible: true, cleanClip: true,
+        open: false,
+      };
+    }
+    return S.iconAll;
+  }
+
+  function applyToAllIcons(d, key, value) {
+    if (!d || !d.icons) return;
+    for (var i = 0; i < d.icons.length; i++) iconOpts(d.icons[i].nodeId)[key] = value;
+  }
+
+  function iconOpts(id) {
+    if (!S.iconOpts[id]) {
+      S.iconOpts[id] = {
+        fmt: "SVG", scale: 2,
+        contentsOnly: true, svgIdAttribute: true,
+        svgSimplifyStroke: true, svgOutlineText: false,
+        patchStroke: true, labelParts: true, dropInvisible: true, cleanClip: true,
+        open: false,
+      };
+    }
+    return S.iconOpts[id];
+  }
+
+  // Built from state rather than the DOM: Export all has to work with the
+  // section collapsed, when no card inputs exist to read.
+  function iconRow(id) {
+    var o = iconOpts(id);
+    return {
+      format: o.fmt, scaleMode: "SCALE", scaleValue: o.scale, suffix: "",
+      contentsOnly: o.contentsOnly, colorProfile: "SRGB", resampling: "BASIC",
+      svgIdAttribute: o.svgIdAttribute, svgOutlineText: o.svgOutlineText,
+      svgSimplifyStroke: o.svgSimplifyStroke,
+      patchStroke: o.patchStroke, labelParts: o.labelParts,
+      dropInvisible: o.dropInvisible, cleanClip: o.cleanClip,
+    };
+  }
+
+  var ICONS_PER_PAGE = 50;
+
+  function iconPageCount(d) {
+    var n = d.icons ? d.icons.length : 0;
+    return Math.max(1, Math.ceil(n / ICONS_PER_PAGE));
+  }
+
+  // Clamped on read, so a page number left over from a bigger selection can
+  // never point past the end of a smaller one.
+  function iconPageIndex(d) {
+    return Math.min(Math.max(0, S.iconPage), iconPageCount(d) - 1);
+  }
+
+  function iconPageSlice(d) {
+    if (!d.icons) return [];
+    var from = iconPageIndex(d) * ICONS_PER_PAGE;
+    return d.icons.slice(from, from + ICONS_PER_PAGE);
+  }
+
+  function iconPagerHtml(d) {
+    var pages = iconPageCount(d);
+    if (pages < 2) return "";
+    var i = iconPageIndex(d);
+    var from = i * ICONS_PER_PAGE + 1;
+    var to = Math.min(d.icons.length, from + ICONS_PER_PAGE - 1);
+    return '<div class="pager">' +
+      '<button class="xs ghost pgbtn" data-icon-page="prev"' + (i === 0 ? " disabled" : "") +
+      ' title="' + esc(t("prevPage")) + '">' + navArrow(false) + "</button>" +
+      '<span class="pg-n">' + esc(t("pageOf")(i + 1, pages)) + "</span>" +
+      '<button class="xs ghost pgbtn" data-icon-page="next"' + (i >= pages - 1 ? " disabled" : "") +
+      ' title="' + esc(t("nextPage")) + '">' + navArrow(true) + "</button>" +
+      '<span class="pg-range">' + esc(t("showingRange")(from, to, d.icons.length)) + "</span>" +
+      "</div>";
+  }
+
+  function iconsHtml(d) {
+    if (!d.icons || !d.icons.length) return "";
+    var page = iconPageSlice(d);
+    var h = "";
+    for (var i = 0; i < page.length; i++) {
+      var ic = page[i];
+      var relKey = ic.rel === "self" ? "iconSelf" : (ic.rel === "ancestor" ? "iconAncestor" : "iconChild");
+      var meta = [ic.w + "×" + ic.h, t(relKey)];
+      if (ic.path) meta.push(ic.path);
+      if (ic.hidden) meta.push(t("hidden"));
+      var cached = S.previews[ic.nodeId];
+      var o = iconOpts(ic.nodeId);
+      h += '<div class="card clickable' + (ic.nodeId === S.pickedId ? " picked" : "") +
+        '" data-icon="' + esc(ic.nodeId) + '" data-pick="' + esc(ic.nodeId) +
+        '" title="' + esc(t("selectOnCanvas")) + '">' +
+        '<div class="card-head">' +
+        '<div class="icon-prev"><img data-prev="' + esc(ic.nodeId) + '"' +
+        (cached ? ' src="' + cached + '"' : ' style="display:none"') + " /></div>" +
+        '<div style="flex:1;min-width:0">' +
+        '<div class="ch-name">' + esc(ic.label || ic.name) + "</div>" +
+        '<div class="ch-sub">' + esc(meta.join(" · ")) + "</div>" +
+        "</div>" +
+        "</div>" +
+        '<div class="exp-controls">' +
+        '<select data-scale>' +
+        [1, 2, 3, 4].map(function (n) {
+          return '<option value="' + n + '"' + (n === o.scale ? " selected" : "") + ">" + n + "×</option>";
+        }).join("") +
+        "</select>" +
+        '<select data-fmt class="grow">' +
+        ["SVG", "PNG", "JPG", "PDF"].map(function (f) {
+          return '<option value="' + f + '"' + (f === o.fmt ? " selected" : "") + ">" + f + "</option>";
+        }).join("") +
+        "</select>" +
+        '<button class="xs ghost dots' + (o.open ? " on" : "") + '" data-icon-more title="' +
+        esc(t("exportSettings")) + '">•••</button>' +
+        '<button class="xs" data-copysvg>' + esc(t("exportCopy")) + "</button>" +
+        '<button class="primary xs" data-exp>' + esc(t("exportBtn")) + "</button>" +
+        "</div>" + iconOptsHtml(o) + "</div>";
+    }
+    return h;
+  }
+
+  function iconOptsHtml(o) {
+    if (!o.open) return "";
+    return '<div class="exp-more" style="margin-top:8px">' +
+      '<div class="exp-checks">' +
+      expCheck("data-icon-patch", o.patchStroke, t("svgPatch"), t("svgPatchTip")) +
+      expCheck("data-icon-label", o.labelParts, t("svgLabel"), t("svgLabelTip")) +
+      expCheck("data-icon-hidden", o.dropInvisible, t("svgDropHidden"), t("svgDropHiddenTip")) +
+      expCheck("data-icon-clip", o.cleanClip, t("svgCleanClip"), t("svgCleanClipTip")) +
+      expCheck("data-icon-svgid", o.svgIdAttribute, t("svgId"), t("svgIdTip")) +
+      expCheck("data-icon-svgstroke", o.svgSimplifyStroke, t("svgSimplify"), t("svgSimplifyTip")) +
+      expCheck("data-icon-svgtext", o.svgOutlineText, t("svgOutlineText"), t("svgOutlineTextTip")) +
+      expCheck("data-icon-contents", o.contentsOnly, t("ignoreOverlap"), t("ignoreOverlapTip")) +
+      "</div></div>";
+  }
+
+  // Thumbnails are exported on demand and cached, so re-renders don't re-export.
+  // Each preview is an export on the main thread, so a library of hundreds must
+  // not ask for them all at once. Paging bounds it instead: whatever is on the
+  // current page is requested, and nothing else.
+  //
+  // This deliberately does NOT key off whether a card is visible. An icon with
+  // no preview yet renders its <img> as display:none, and an element with no
+  // box never intersects anything — so a visibility-driven version loads
+  // almost nothing, which is exactly what it did.
+  function requestPreviews(d) {
+    if (!d.icons || !d.icons.length) return;
+    var page = iconPageSlice(d);
+    var want = [];
+    for (var i = 0; i < page.length; i++) {
+      var id = page[i].nodeId;
+      if (id && !S.previews[id] && !S.previewAsked[id]) {
+        S.previewAsked[id] = true;
+        want.push(id);
+      }
+    }
+    if (want.length) post({ type: "icon-previews", nodeIds: want });
+  }
+
+  function bytesToPng(bytes) {
+    var bin = "", chunk = 0x8000;
+    for (var i = 0; i < bytes.length; i += chunk) {
+      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+    }
+    return "data:image/png;base64," + btoa(bin);
+  }
+
+  /* --- component properties --- */
+
+  function propsHtml(d) {
+    if (!d.props || !d.props.length) return "";
+    var h = "";
+    for (var i = 0; i < d.props.length; i++) {
+      var p = d.props[i];
+      h += '<div class="prow"><span class="pk">' + esc(p.name) + "</span>" +
+        '<span class="pv"><span class="copy" data-copy="' + esc(p.value) + '">' + esc(val(p.value)) + "</span>" +
+        (p.tok ? tokHtml(p.tok) : "") + "</span></div>";
+    }
+    return h;
+  }
+
+  /* --- scroll behavior --- */
+
+  // Two rows, worded the way the editor's own Scroll behavior dropdowns are.
+  // The enum goes straight into the string key, so an unknown future value
+  // falls through t() and shows itself rather than an empty cell.
+  function scrollHtml(d) {
+    var sb = d.scroll;
+    if (!sb) return "";
+    // Scrolling with the parent and not scrolling your own contents is what
+    // every layer starts as. Spelling that out as two rows implies somebody
+    // chose it; one line says the same thing honestly.
+    var isDefault = (!sb.position || sb.position === "SCROLLS") &&
+                    (!sb.overflow || sb.overflow === "NONE");
+    if (isDefault) return '<div class="muted" style="padding:2px">' + esc(t("scrollNone")) + "</div>";
+    var rows = [];
+    if (sb.position) rows.push({ k: t("lblScrollPos"), v: t("scroll" + sb.position), raw: true });
+    if (sb.overflow) rows.push({ k: t("lblOverflow"), v: t("ov" + sb.overflow), raw: true });
+    return rowsHtml(rows);
+  }
+
+  /* --- layout: the auto layout control, drawn the way the editor draws it,
+         because "align primary / align counter" reads as jargon --- */
+
+  // A read-only mirror of the editor's Auto layout panel: labelled rows of
+  // field boxes, shaped by which layout mode the node is actually in.
+  function layoutHtml(d) {
+    var L = d.layout;
+    if (!L) return "";
+    var h = '<div class="lp">';
+
+    if (L.sizing) {
+      h += lpRow(t("lblResizing"), [
+        lpField("W", L.sizing.w.v, L.sizing.w.tok, L.sizing.w.mode),
+        lpField("H", L.sizing.h.v, L.sizing.h.tok, L.sizing.h.mode),
+      ]);
+    }
+
+    if (L.span && (L.span.colSpan || L.span.rowSpan || L.span.colStart || L.span.rowStart)) {
+      h += lpRow(t("lblGridPlace"), [
+        lpField(t("abbrCol"), L.span.colSpan, null, null),
+        lpField(t("abbrRow"), L.span.rowSpan, null, null),
+        L.span.colStart ? lpField(t("abbrColStart"), L.span.colStart, null, null) : "",
+        L.span.rowStart ? lpField(t("abbrRowStart"), L.span.rowStart, null, null) : "",
+      ]);
+    }
+
+    if (L.grid) {
+      h += lpRow(t("lblGrid"), [
+        lpField(t("abbrCols"), L.grid.cols, null, null),
+        lpField(t("abbrRows"), L.grid.rows, null, null),
+      ]);
+      h += lpRow(t("lblGaps"), [
+        lpField(t("abbrColGap"), L.grid.colGap.v, L.grid.colGap.tok, null),
+        lpField(t("abbrRowGap"), L.grid.rowGap.v, L.grid.rowGap.tok, null),
+      ]);
+    }
+
+    if (L.align) {
+      h += lpRow(t("lblAlignment"), [
+        alignWidget(L.align),
+        L.gap ? lpField(t("abbrGap"), L.gap.v, L.gap.tok, L.gap.auto ? t("spaceBetween") : null) : "",
+        L.crossGap ? lpField(t("abbrCrossGap"), L.crossGap.v, L.crossGap.tok, null) : "",
+      ]);
+    }
+
+    if (L.pad) h += lpRow(t("lblPadding"), padFields(L.pad));
+
+    if (L.pos) {
+      h += lpRow(t("lblPosition"), [
+        lpField("X", L.pos.x, null, null),
+        lpField("Y", L.pos.y, null, null),
+      ]);
+      // The four edge distances belong to Position, laid out as equal columns
+      // so they line up rather than wrapping at content width.
+      if (L.edges) {
+        h += lpRow("", [
+          lpField(t("edgeT"), L.edges.t, null, null),
+          lpField(t("edgeR"), L.edges.r, null, null),
+          lpField(t("edgeB"), L.edges.b, null, null),
+          lpField(t("edgeL"), L.edges.l, null, null),
+        ], "cols4");
+      }
+    }
+
+    var flags = [];
+    if (L.absolute) flags.push(lpField(t("abbrPos"), t("absolute"), null, null));
+    if (L.clips !== null && L.clips !== undefined) {
+      flags.push('<span class="lp-check' + (L.clips ? " on" : "") + '">' +
+        '<span class="box">' + (L.clips ? "✓" : "") + "</span>" + esc(t("clipContent")) + "</span>");
+    }
+    if (flags.length) h += lpRow("", flags);
+
+    h += "</div>";
+    if (L.rows && L.rows.length) h += '<div style="margin-top:10px">' + rowsHtml(L.rows) + "</div>";
+    return h;
+  }
+
+  function lpRow(label, fields, mod) {
+    var body = fields.filter(function (f) { return !!f; }).join("");
+    if (!body) return "";
+    return '<div class="lp-row"><div class="lp-label">' + esc(label) + "</div>" +
+      '<div class="lp-fields' + (mod ? " " + mod : "") + '">' + body + "</div></div>";
+  }
+
+  // key = the short prefix inside the box (W, H, GAP…); mode = the trailing
+  // muted qualifier (Fill, Hug, Space between…).
+  function lpField(key, value, tok, mode, keyIsHtml) {
+    if (value === null || value === undefined || value === "") return "";
+    return '<span class="lp-field">' +
+      (key ? (keyIsHtml ? key : '<span class="lp-fk">' + esc(key) + "</span>") : "") +
+      '<span class="lp-fv copy" data-copy="' + esc(value) + '">' + esc(val(value)) + "</span>" +
+      (mode ? '<span class="lp-fm">' + esc(val(mode)) + "</span>" : "") +
+      (tok ? tokHtml(tok) : "") +
+      "</span>";
+  }
+
+  // Edge icons in the editor's idiom: a faint box with the relevant sides drawn
+  // solid, so which padding a field controls is readable without a label.
+  var PAD_EDGES = {
+    all: ["T", "R", "B", "L"], v: ["T", "B"], h: ["L", "R"],
+    T: ["T"], R: ["R"], B: ["B"], L: ["L"],
+  };
+  var PAD_PATHS = {
+    T: "M3.1 2.6H8.9", B: "M3.1 9.4H8.9", L: "M2.6 3.1V8.9", R: "M9.4 3.1V8.9",
+  };
+  function padIcon(kind) {
+    var edges = PAD_EDGES[kind] || [];
+    var lines = edges.map(function (e) {
+      return '<path d="' + PAD_PATHS[e] + '" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>';
+    }).join("");
+    return '<span class="lp-ic"><svg viewBox="0 0 12 12">' +
+      '<rect x="2.6" y="2.6" width="6.8" height="6.8" rx="1.4" fill="none" stroke="currentColor" stroke-width="1" opacity=".3"/>' +
+      lines + "</svg></span>";
+  }
+
+  // One field per axis when the two sides match, separate fields when they don't.
+  function padFields(pad) {
+    if (pad.uniform) return [lpField(padIcon("all"), pad.t.v, pad.t.tok, null, true)];
+    var out = [];
+    if (pad.pairedV) out.push(lpField(padIcon("v"), pad.t.v, pad.t.tok, null, true));
+    else {
+      out.push(lpField(padIcon("T"), pad.t.v, pad.t.tok, null, true));
+      out.push(lpField(padIcon("B"), pad.b.v, pad.b.tok, null, true));
+    }
+    if (pad.pairedH) out.push(lpField(padIcon("h"), pad.l.v, pad.l.tok, null, true));
+    else {
+      out.push(lpField(padIcon("L"), pad.l.v, pad.l.tok, null, true));
+      out.push(lpField(padIcon("R"), pad.r.v, pad.r.tok, null, true));
+    }
+    return out;
+  }
+
+  function alignWidget(a) {
+    var horiz = a.mode === "HORIZONTAL";
+    var spread = a.primary === "SPACE_BETWEEN";
+    // Primary axis runs along the direction; counter axis crosses it.
+    var pos = { MIN: 1, CENTER: 2, MAX: 3, SPACE_BETWEEN: 1, BASELINE: 3 };
+    var pIdx = pos[a.primary] || 1;
+    var cIdx = pos[a.counter] || 1;
+    var barCol = horiz ? pIdx : cIdx;
+    var barRow = horiz ? cIdx : pIdx;
+
+    var bars = '<div class="al-bars ' + (horiz ? "h" : "v") + (spread ? " spread" : "") + '" style="grid-row:' +
+      (horiz ? barRow : (spread ? "1 / 4" : barRow)) + ";grid-column:" +
+      (horiz ? (spread ? "1 / 4" : barCol) : barCol) + '">' +
+      '<span class="al-bar"></span><span class="al-bar"></span><span class="al-bar"></span></div>';
+
+    var cells = "";
+    for (var r = 1; r <= 3; r++) {
+      for (var c = 1; c <= 3; c++) {
+        var covered = horiz
+          ? (r === barRow && (spread || c === barCol))
+          : (c === barCol && (spread || r === barRow));
+        if (covered) continue;
+        cells += '<div class="al-cell" style="grid-row:' + r + ";grid-column:" + c + '"><span class="dot"></span></div>';
+      }
+    }
+
+    // MIN/MAX are Figma's internal enum names, not something a dev should have
+    // to decode — resolve each axis to the actual side it means (Top/Left/etc)
+    // based on which physical direction that axis runs.
+    var sub = [axisWord(horiz, a.primary), axisWord(!horiz, a.counter)].join(" · ");
+    return '<div class="al-widget">' +
+      '<div class="al-grid" title="' + esc(sub) + '">' + cells + bars + "</div>" +
+      '<div class="al-caption"><div class="al-dir">' + esc(val(pretty(a.mode))) +
+      (a.wrap ? " · " + esc(val("Wrap")) : "") + "</div>" +
+      '<div class="al-sub">' + esc(sub) + "</div></div></div>";
+  }
+
+  function pretty(v) {
+    if (!v) return "";
+    var x = String(v).toLowerCase().replace(/_/g, " ");
+    return x.charAt(0).toUpperCase() + x.slice(1);
+  }
+
+  // isHorizontalAxis: true if this particular axis runs left-right.
+  function axisWord(isHorizontalAxis, value) {
+    if (value === "SPACE_BETWEEN") return val("Space between");
+    if (value === "CENTER") return val("Center");
+    if (value === "BASELINE") return val("Baseline");
+    if (isHorizontalAxis) return val(value === "MAX" ? "Right" : "Left");
+    return val(value === "MAX" ? "Bottom" : "Top");
+  }
+
+  /* --- layout grids --- */
+
+  function gridsHtml(d) {
+    if (!d.grids) return "";
+    var h = d.grids.style ? '<div class="prow"><span class="pk">' + esc(t("gridStyle")) + '</span><span class="pv">' + tokHtml(d.grids.style) + "</span></div>" : "";
+    for (var i = 0; i < d.grids.grids.length; i++) {
+      h += '<div class="card">' + rowsHtml(d.grids.grids[i].rows) + "</div>";
+    }
+    return h;
+  }
+
+  /* --- typography --- */
+
+  function typeHtml(d) {
+    var tx = d.text;
+    if (!tx) return "";
+    var h = "";
+
+    if (tx.mixed) {
+      h += '<div class="muted" style="margin-bottom:6px">' + esc(t("mixedStyles")) + "</div>";
+      for (var i = 0; i < tx.segments.length; i++) {
+        var sg = tx.segments[i];
+        h += '<div class="card"><div class="card-head"><div class="ch-name">' +
+          esc(t("segment")) + (i + 1) + '</div></div><div class="ch-sub" style="margin:2px 0 4px">"' + esc(sg.text) + '"</div>' +
+          (sg.style ? stylePill(sg.style, "", "seg" + i) : "") +
+          (S.detail["seg" + i] ? '<div class="detail-box">' + rowsHtml(sg.rows) + "</div>" : "") +
+          "</div>";
+      }
+    } else if (tx.styleName) {
+      // Style applied: the name is the spec. Click it to copy, "details" for metrics.
+      h += stylePill(tx.styleName, "", "type");
+      if (S.detail["type"]) h += '<div class="detail-box">' + rowsHtml(tx.detailRows) + "</div>";
+    } else {
+      h += '<div class="muted" style="margin-bottom:6px">' + esc(t("noStyle")) + "</div>";
+      h += rowsHtml(tx.detailRows);
+    }
+
+    h += rowsHtml(tx.rows);
+    h += paintsHtml(tx.fills, t("fill"));
+    return h;
+  }
+
+  // Shared pill: optional category icon, copyable name, optional summary,
+  // details toggle right.
+  function stylePill(name, summary, key, iconHtml) {
+    return '<div class="style-pill">' +
+      (iconHtml || "") +
+      '<span class="sp-name copy" data-copy="' + esc(name) + '" title="' + esc(name) + '">' + esc(name) + "</span>" +
+      (summary ? '<span class="sp-hint mono">' + esc(summary) + "</span>" : "") +
+      '<button class="xs ghost sp-toggle" data-detail="' + esc(key) + '">' +
+      esc(S.detail[key] ? t("hideDetails") : t("showDetails")) + "</button>" +
+      "</div>";
+  }
+
+  // Small glyphs standing in for Figma's own effect-category icons — the
+  // plugin sandbox can't reach Figma's icon assets over the network, so these
+  // are drawn to read the same way at a glance: a shadow pair, an inset
+  // shadow, a soft blurred dot, a blurred dot behind a frame.
+  var EFFECT_ICONS = {
+    DROP_SHADOW: '<svg viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="6" y="6" width="8" height="8" rx="1.5" fill="currentColor" opacity=".38"/></svg>',
+    INNER_SHADOW: '<svg viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4.3 4.3c3.4.3 5.7 2.6 6 6" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round" opacity=".55"/></svg>',
+    LAYER_BLUR: '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="1.3 1.7" opacity=".65"/><circle cx="8" cy="8" r="2.1" fill="currentColor"/></svg>',
+    BACKGROUND_BLUR: '<svg viewBox="0 0 16 16"><rect x="2" y="2" width="12" height="12" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="1.3 1.5" opacity=".7"/><circle cx="8" cy="8" r="2.3" fill="currentColor" opacity=".55"/></svg>',
+    GLASS: '<svg viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="2.5" fill="currentColor" opacity=".16"/><rect x="2.5" y="2.5" width="11" height="11" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M5 11.2 10.6 4.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" opacity=".85"/><path d="M8.4 12 11.6 8.2" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" opacity=".5"/></svg>',
+    NOISE: '<svg viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.2"/><circle cx="5.5" cy="6" r=".85" fill="currentColor"/><circle cx="9.2" cy="4.9" r=".7" fill="currentColor"/><circle cx="11.2" cy="7.6" r=".85" fill="currentColor"/><circle cx="6.6" cy="9.4" r=".7" fill="currentColor"/><circle cx="9.6" cy="11" r=".85" fill="currentColor"/><circle cx="4.9" cy="11.4" r=".6" fill="currentColor"/></svg>',
+    TEXTURE: '<svg viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M4 10.5 10.5 4M6.5 12.5 12.5 6.5M3.5 7 7 3.5" stroke="currentColor" stroke-width="1" stroke-linecap="round" opacity=".7"/></svg>',
+  };
+  function effectIcon(type) {
+    var svg = EFFECT_ICONS[type];
+    return svg ? '<span class="sp-icon">' + svg + "</span>" : "";
+  }
+
+  function contentHtml(d) {
+    if (!d.text) return "";
+    var tx = d.text;
+    if (!tx.characters && !tx.contentVar) return "";
+    var h = "";
+    if (tx.contentVar) {
+      h += '<div class="prow"><span class="pk">' + esc(t("variable")) + '</span><span class="pv">' + tokHtml(tx.contentVar) + "</span></div>";
+    }
+    if (tx.characters) {
+      h += '<div class="content-box copy" data-copy="' + esc(tx.characters) + '">' + esc(tx.characters) + "</div>";
+    }
+    return h;
+  }
+
+  /* --- appearance --- */
+
+  // Grouped the way the editor groups it: layer-level properties first, then a
+  // Fill block, then a Stroke block that owns everything about the stroke —
+  // paint, position, weight, dashes and ends. Previously "Stroke" appeared
+  // twice and Style/Ends read as top-level categories of their own.
+  function appearanceHtml(d) {
+    var a = d.appearance;
+    if (!a) return "";
+    var fills = d.text ? [] : a.fills;   // text fills live in the Type section
+    var h = rowsHtml(a.rows);
+
+    if (fills.length) {
+      h += subsec(t("fill")) + paintList(fills);
+    }
+    if (a.strokes.length || a.stroke) {
+      h += subsec(t("stroke")) + paintList(a.strokes) + strokeHtml(a.stroke);
+    }
+    return h;
+  }
+
+  function subsec(label) {
+    return '<div class="subsec">' + esc(label) + "</div>";
+  }
+
+  // Paints under a sub-header need no label column — the header names them.
+  function paintList(list) {
+    if (!list || !list.length) return "";
+    return list.map(function (p) {
+      return '<div class="paint-row' + (p.visible === false ? " muted" : "") + '">' +
+        (p.kind === "gradient" ? gradientBody(p) : solidBody(p)) +
+        (p.visible === false ? ' <span class="hidden-flag">(' + esc(t("hidden")) + ")</span>" : "") +
+        "</div>";
+    }).join("");
+  }
+
+  // The editor's stroke section, minus width profile: position and weight, the
+  // four sides when they differ, then the dash and corner settings.
+  function strokeHtml(sk) {
+    if (!sk) return "";
+    var h = '<div class="lp" style="margin:6px 0 4px">';
+
+    h += lpRow(t("lblStrokePos"), [
+      lpField("", val(sk.align), null, null),
+      lpField(t("abbrWeight"), sk.weight, sk.weightTok, null),
+    ]);
+
+    if (sk.perSide && sk.sides) {
+      h += lpRow(t("lblSides"), [
+        lpField(padIcon("T"), sk.sides.t.v, sk.sides.t.tok, null, true),
+        lpField(padIcon("R"), sk.sides.r.v, sk.sides.r.tok, null, true),
+        lpField(padIcon("B"), sk.sides.b.v, sk.sides.b.tok, null, true),
+        lpField(padIcon("L"), sk.sides.l.v, sk.sides.l.tok, null, true),
+      ], "cols4");
+    }
+
+    var styleFields = [lpField("", val(sk.style), null, null)];
+    if (sk.style === "Dashed") {
+      styleFields.push(lpField(t("abbrDash"), sk.dash, null, null));
+      styleFields.push(lpField(t("abbrGap"), sk.gap, null, null));
+    } else if (sk.pattern) {
+      styleFields.push(lpField(t("abbrPattern"), sk.pattern, null, null));
+    }
+    h += lpRow(t("lblStrokeStyle"), styleFields);
+
+    var ends = [];
+    if (sk.cap) ends.push(lpField(t("abbrEnds"), val(sk.cap), null, null));
+    if (sk.join) ends.push(lpField(t("abbrJoin"), val(sk.join), null, null));
+    if (sk.miter) ends.push(lpField(t("abbrMiter"), sk.miter + "°", null, null));
+    if (ends.length) h += lpRow(t("lblEnds"), ends);
+
+    return h + "</div>";
+  }
+
+  /* --- selection colours: every colour inside the selection, hover to
+         highlight every layer using it (Dev Mode's "Selection colors") --- */
+
+  function colorsCount(d) {
+    return d.colors && d.colors.colors.length ? String(d.colors.colors.length) : "";
+  }
+
+  function colorsHtml(d) {
+    if (!d.colors) return "";
+    var list = d.colors.colors;
+    var h = "";
+    for (var i = 0; i < list.length; i++) {
+      var c = list[i];
+      var fill = c.kind === "solid"
+        ? "background:" + c.hex + ";opacity:" + (c.alpha === undefined ? 1 : c.alpha)
+        : (c.kind === "gradient" && c.stops && c.stops.length
+            ? "background:linear-gradient(135deg," + c.stops.join(",") + ")"
+            : "background:var(--bg-2)");
+      var copyTarget = c.kind === "solid" ? c.hex : (c.token || c.style || c.summary);
+      var ids = c.nodeIds.join(",");
+      h += '<div class="sc-row' + (ids === S.pickedId ? " picked" : "") + '"' +
+        (ids ? ' data-pick="' + esc(ids) + '" title="' +
+          esc(c.nodeIds.length > 1 ? t("selectAllUsing")(c.nodeIds.length) : t("selectOnCanvas")) + '"' : "") + ">" +
+        '<span class="sc-sw"><i style="' + esc(fill) + '"></i></span>' +
+        '<span class="sc-mid">' +
+        '<span class="sc-val copy" data-copy="' + esc(copyTarget) + '">' + esc(c.summary) + "</span>" +
+        (c.tokens
+          ? c.tokens.map(function (tk) {
+              return tk ? tokHtml(tk) : '<span class="tok-none">' + esc(t("noToken")) + "</span>";
+            }).join('<span class="arrow">→</span>')
+          : (c.token ? tokHtml(c.token) : (c.style ? tokHtml(c.style) : ""))) +
+        "</span>" +
+        "</div>";
+    }
+    if (d.colors.truncated) h += '<div class="muted" style="padding:4px 6px">' + esc(t("truncatedList")) + "</div>";
+    return h;
+  }
+
+  /* --- translation: variable × language, name column pinned left --- */
+
+  // Shown on hover so it's obvious a cell can be clicked to copy.
+  var CP_ICON = '<span class="cp-ic">⧉</span>';
+
+  var DEFAULT_COLS = { name: 128, desc: 150, mode: 165 };
+
+  function colW(key, fallback) {
+    var w = S.langCols[key];
+    return typeof w === "number" && w > 0 ? w : fallback;
+  }
+
+  // A grip on the right edge of every header cell. The header is sticky, which
+  // is a positioned element, so it already anchors this absolutely. It carries
+  // the column's current width so the drag has an exact starting point rather
+  // than having to read a computed style back out of the DOM.
+  function grip(key, width) {
+    return '<span class="colres" data-colres="' + esc(key) + '" data-colw="' + width +
+      '" title="' + esc(t("dragResize")) + '"></span>';
+  }
+
+  function translationHtml(d) {
+    var tr = d.translation;
+    if (!tr) return "";
+
+    var keys = ["name", "desc"];
+    for (var q = 0; q < tr.modes.length; q++) keys.push("m:" + tr.modes[q].modeId);
+    var widths = keys.map(function (k, i) {
+      return colW(k, i === 0 ? DEFAULT_COLS.name : (i === 1 ? DEFAULT_COLS.desc : DEFAULT_COLS.mode));
+    });
+
+    var h = '<div class="tr-wrap"><table class="tr-table"><colgroup>' +
+      widths.map(function (w) { return '<col style="width:' + w + 'px">'; }).join("") +
+      "<col></colgroup><thead><tr>" +
+      '<th class="tr-name">' + esc(t("variable")) + grip("name", widths[0]) + "</th>" +
+      '<th class="tr-desc">' + esc(t("description")) + grip("desc", widths[1]) + "</th>";
+    for (var m = 0; m < tr.modes.length; m++) {
+      h += "<th>" + esc(tr.modes[m].name) +
+        (tr.modes[m].isDefault ? ' <span class="tr-def">' + esc(t("defaultMode")) + "</span>" : "") +
+        grip("m:" + tr.modes[m].modeId, widths[2 + m]) + "</th>";
+    }
+    h += '<th class="tr-pad"></th></tr></thead><tbody>';
+
+    for (var i = 0; i < tr.rows.length; i++) {
+      var r = tr.rows[i];
+      // The row is the layer: hover previews it, click selects it. The copy
+      // button next to the name is the way to grab the variable name itself.
+      // Every cell is a copy target; nothing here selects. Hovering the row
+      // previews the text layer that uses this string on the canvas.
+      h += '<tr data-hover="' + esc(r.nodeId) + '">' +
+        '<th class="tr-name copy" data-copy="' + esc(r.name) + '" title="' + esc(r.fullName || r.name) + '">' +
+        esc(r.name) + CP_ICON +
+        '<div class="tr-sub">' + esc(r.nodeName) + (r.count > 1 ? " ×" + r.count : "") + "</div></th>";
+      var desc = r.desc ? String(r.desc).trim() : "";
+      h += '<td class="tr-desc' + (desc ? " copy" : " none") + '"' +
+        (desc ? ' data-copy="' + esc(desc) + '"' : "") + ">" +
+        esc(desc || t("noDescription")) + (desc ? CP_ICON : "") + "</td>";
+      for (var k = 0; k < tr.modes.length; k++) {
+        var v = r.values[tr.modes[k].modeId];
+        var missing = v === null || v === undefined || v === "" || v === "--";
+        h += '<td class="' + (missing ? "empty" : "copy") + '"' +
+          (missing ? "" : ' data-copy="' + esc(v) + '"') + ">" +
+          esc(missing ? t("noValue") : v) + (missing ? "" : CP_ICON) + "</td>";
+      }
+      h += '<td class="tr-pad"></td></tr>';
+    }
+    h += "</tbody></table></div>";
+    if (tr.truncated) h += '<div class="muted" style="margin-top:6px">' + esc(t("truncatedList")) + "</div>";
+    return h;
+  }
+
+  /* --- effects --- */
+
+  function effectsCount(d) {
+    if (!d.effects || !d.effects.groups.length) return "";
+    var n = 0;
+    for (var i = 0; i < d.effects.groups.length; i++) n += d.effects.groups[i].items.length;
+    return String(n);
+  }
+
+  function effectsHtml(d) {
+    if (!d.effects) return "";
+    var g = d.effects.groups;
+    if (!g.length) return '<div class="muted">' + esc(t("effectsNone")) + "</div>";
+    var h = "";
+    for (var i = 0; i < g.length; i++) {
+      var grp = g[i];
+      // The whole card jumps to the layer, like an icon card — except the
+      // currently-selected layer's own card, which has nowhere to jump to.
+      var jumpable = !grp.own;
+      h += '<div class="card' + (grp.own ? " own" : " clickable") +
+        (grp.nodeId === S.pickedId ? " picked" : "") + '"' +
+        (jumpable ? ' data-pick="' + esc(grp.nodeId) + '" title="' + esc(t("selectOnCanvas")) + '"' : "") +
+        ">" +
+        '<div class="card-head">' +
+        '<div style="flex:1;min-width:0">' +
+        '<div class="ch-name">' + esc(grp.own ? d.name : grp.nodeName) + "</div>" +
+        '<div class="ch-sub">' + esc(grp.own ? t("effectsHere") : t("effectsNested") + " · " + grp.depth) + "</div>" +
+        "</div></div>";
+
+      var summary = grp.items.map(function (it) { return val(it.label) + " " + it.summary; }).join("  ·  ");
+      var firstIcon = effectIcon(grp.items[0] && grp.items[0].type);
+
+      if (grp.style) {
+        // A named effect style is the spec — show the token, hide the numbers.
+        var key = "eff" + i;
+        h += stylePill(grp.style, "", key, firstIcon);
+        if (S.detail[key]) {
+          h += '<div class="detail-box">';
+          for (var j = 0; j < grp.items.length; j++) {
+            h += '<div class="prow"><span class="pk">' + esc(val(grp.items[j].label)) + "</span>" +
+              '<span class="pv mono">' + esc(grp.items[j].summary) + "</span></div>" +
+              rowsHtml(grp.items[j].rows);
+          }
+          h += "</div>";
+        } else {
+          h += '<div class="muted mono" style="font-size:10px">' + esc(summary) + "</div>";
+        }
+      } else {
+        for (var k = 0; k < grp.items.length; k++) {
+          var it = grp.items[k];
+          var ikey = "eff" + i + "_" + k;
+          h += stylePill(val(it.label), it.summary, ikey, effectIcon(it.type));
+          if (S.detail[ikey]) h += '<div class="detail-box">' + rowsHtml(it.rows) + "</div>";
+        }
+      }
+      h += "</div>";
+    }
+    if (d.effects.truncated) h += '<div class="muted">' + esc(t("truncatedList")) + "</div>";
+    return h;
+  }
+
+  /* ---------------- wiring ---------------- */
+
+  function wire(d) {
+    main.querySelectorAll("[data-sec]").forEach(function (el) {
+      el.onclick = function () {
+        var id = el.getAttribute("data-sec");
+        S.open[id] = !S.open[id];
+        var body = main.querySelector('[data-secbody="' + id + '"]');
+        el.classList.toggle("closed", !S.open[id]);
+        if (body) body.classList.toggle("hidden", !S.open[id]);
+      };
+    });
+
+    // Deliberately does NOT stop propagation: copying a value or token should
+    // also select the layer its row points at, so the click falls through to
+    // the row's [data-pick] handler. Rows without one just copy.
+    main.querySelectorAll("[data-copy]").forEach(function (el) {
+      el.onclick = function () { copyText(el.getAttribute("data-copy")); };
+    });
+
+    main.querySelectorAll("[data-nav]").forEach(function (el) {
+      el.onclick = function (ev) {
+        ev.stopPropagation();
+        // Remember which tree row we jumped from, so stepping back can point
+        // at it again — the tree re-roots at the main component in between and
+        // would otherwise come back fully collapsed. Filed under the tree it
+        // belongs to: jumping from A into A's main and then on from 가 leaves a
+        // marker in each, so every step back finds its own.
+        var from = el.getAttribute("data-nav-from");
+        var root = S.node && S.node.tree ? S.node.tree.rootId : null;
+        if (from && root) S.origins[root] = { id: from, gen: -1 };
+        navTo(el.getAttribute("data-nav"), false, el.hasAttribute("data-focus"));
+      };
+    });
+
+    // Selecting a layer from a row: canvas follows, panel stays where it is.
+    main.querySelectorAll("[data-pick]").forEach(function (el) {
+      el.onclick = function (ev) {
+        ev.stopPropagation();
+        pickLayer(el.getAttribute("data-pick"), el);
+      };
+    });
+
+    main.querySelectorAll("[data-tree]").forEach(function (el) {
+      el.onclick = function (ev) {
+        ev.stopPropagation();
+        S.treeOpen[el.getAttribute("data-tree")] = el.classList.contains("closed");
+        renderBody();
+      };
+    });
+
+    // Double-clicking anywhere on a row expands/collapses it — the caret is a
+    // small target. The single clicks that precede it still select the layer.
+    main.querySelectorAll("[data-expand]").forEach(function (el) {
+      el.ondblclick = function (ev) {
+        ev.stopPropagation();
+        var id = el.getAttribute("data-expand");
+        S.treeOpen[id] = !treeIsOpen({ id: id });
+        renderBody();
+      };
+    });
+
+    main.querySelectorAll("[data-hover]").forEach(function (el) {
+      var id = el.getAttribute("data-hover");
+      el.addEventListener("mouseenter", function () { hoverStart(id); });
+      el.addEventListener("mouseleave", function () { hoverStop(id); });
+    });
+
+    main.querySelectorAll("[data-tip]").forEach(function (el) {
+      var text = el.getAttribute("data-tip");
+      el.addEventListener("mouseenter", function () { showTip(el, text); });
+      el.addEventListener("mouseleave", hideTip);
+    });
+
+    main.querySelectorAll("[data-tab]").forEach(function (el) {
+      el.onclick = function (ev) {
+        ev.stopPropagation();
+        if (el.disabled) return;
+        settleScroll();
+        S.tab = el.getAttribute("data-tab");
+        renderBody();
+      };
+    });
+
+    var propsBtn = main.querySelector("[data-props-toggle]");
+    if (propsBtn) {
+      propsBtn.onclick = function (ev) {
+        ev.stopPropagation();
+        S.propsOpen = !S.propsOpen;
+        renderBody();
+      };
+    }
+
+    wireExport();
+
+    var thumbBtn = main.querySelector("[data-thumb-toggle]");
+    if (thumbBtn) {
+      thumbBtn.onclick = function (ev) {
+        ev.stopPropagation();  // don't collapse the section
+        S.showThumbs = !S.showThumbs;
+        savePrefs();
+        renderBody();
+      };
+    }
+
+    var sizeInput = main.querySelector("[data-thumb-size]");
+    if (sizeInput) {
+      sizeInput.onclick = function (ev) { ev.stopPropagation(); };
+      // Resize live while dragging; only persist once the drag settles.
+      sizeInput.oninput = function (ev) {
+        ev.stopPropagation();
+        S.thumbSize = parseInt(sizeInput.value, 10) || 24;
+        main.querySelectorAll("[data-thumb]").forEach(function (img) {
+          if (img.parentNode && img.parentNode.style) {
+            img.parentNode.style.width = S.thumbSize + "px";
+            img.parentNode.style.height = S.thumbSize + "px";
+          }
+        });
+      };
+      sizeInput.onchange = function (ev) { ev.stopPropagation(); savePrefs(); };
+    }
+
+    var collapseBtn = main.querySelector("[data-collapse-tree]");
+    if (collapseBtn && d && d.tree) {
+      collapseBtn.onclick = function (ev) {
+        ev.stopPropagation();
+        // Every row defaults collapsed, so a clean reset is a full collapse.
+        S.treeOpen = {};
+        renderBody();
+      };
+    }
+
+    main.querySelectorAll("[data-detail]").forEach(function (el) {
+      el.onclick = function (ev) {
+        ev.stopPropagation();
+        var k = el.getAttribute("data-detail");
+        S.detail[k] = !S.detail[k];
+        renderBody();
+      };
+    });
+
+    // Column drag in the language table. The <col> is what actually sizes the
+    // column, so the drag writes there and the cells follow.
+    main.querySelectorAll("[data-tok-fmt]").forEach(function (b) {
+      b.onclick = function (ev) {
+        if (ev.stopPropagation) ev.stopPropagation();
+        S.tokenDots = b.getAttribute("data-tok-fmt") === "dot";
+        savePrefs();
+        renderBody();
+      };
+    });
+
+    main.querySelectorAll("[data-colres]").forEach(function (g) {
+      g.onmousedown = function (ev) {
+        if (ev.preventDefault) ev.preventDefault();
+        if (ev.stopPropagation) ev.stopPropagation();
+        var key = g.getAttribute("data-colres");
+        var table = main.querySelector(".tr-table");
+        var cols = table ? table.querySelectorAll("col") : [];
+        // The grip lives in its own header cell, so its index is the column's.
+        var idx = -1, all = main.querySelectorAll("[data-colres]");
+        for (var i = 0; i < all.length; i++) if (all[i] === g) idx = i;
+        var col = cols[idx];
+        if (!col) return;
+
+        var startX = ev.clientX;
+        var startW = parseInt(g.getAttribute("data-colw"), 10) || DEFAULT_COLS.mode;
+        S.dragging = true;
+        g.classList.add("on");
+
+        var move = function (e) {
+          // Floors at a readable width; no ceiling, since the wrapper scrolls.
+          var next = Math.max(56, Math.round(startW + (e.clientX - startX)));
+          col.style.width = next + "px";
+          S.langCols[key] = next;
+        };
+        var up = function () {
+          document.removeEventListener("mousemove", move, true);
+          document.removeEventListener("mouseup", up, true);
+          S.dragging = false;
+          g.classList.remove("on");
+          savePrefs();
+        };
+        document.addEventListener("mousemove", move, true);
+        document.addEventListener("mouseup", up, true);
+      };
+      // The header row toggles nothing, but the cell underneath is a copy
+      // target — a drag must not also copy.
+      g.onclick = function (ev) { if (ev.stopPropagation) ev.stopPropagation(); };
+    });
+
+    main.querySelectorAll("[data-resize]").forEach(function (h) {
+      h.addEventListener("mousedown", function (ev) {
+        var key = h.getAttribute("data-resize");
+        var box = main.querySelector('[data-rbox="' + key + '"]');
+        if (!box) return;
+        if (ev.preventDefault) ev.preventDefault();
+        var startY = ev.clientY, startH = box.offsetHeight;
+        S.dragging = true;
+
+        var move = function (e) {
+          var next = Math.max(70, Math.min(700, startH + (e.clientY - startY)));
+          box.style.height = next + "px";
+          S.heights[key] = next;
+        };
+        var up = function () {
+          document.removeEventListener("mousemove", move, true);
+          document.removeEventListener("mouseup", up, true);
+          S.dragging = false;
+          savePrefs();
+        };
+        document.addEventListener("mousemove", move, true);
+        document.addEventListener("mouseup", up, true);
+      });
+    });
+
+    if (d) requestPreviews(d);
+    requestThumbs();
+
+    // Export cards: scale is meaningless for SVG/PDF, and copying markup only
+    // makes sense for SVG — both mirror how Figma's own export row behaves.
+    main.querySelectorAll("[data-icon]").forEach(function (card) {
+      var fmt = card.querySelector("[data-fmt]");
+      var scale = card.querySelector("[data-scale]");
+      var copyBtn = card.querySelector("[data-copysvg]");
+      // wire() runs for every card on every render; one missing control here
+      // would throw and leave the whole panel unwired, not just this card.
+      if (!fmt || !scale || !copyBtn) return;
+      // The card itself navigates, so its controls must swallow their clicks.
+      card.querySelectorAll("select").forEach(function (el) {
+        el.onclick = function (ev) { ev.stopPropagation(); };
+      });
+      var sync = function () {
+        var vector = fmt.value === "SVG" || fmt.value === "PDF";
+        scale.disabled = vector;
+        copyBtn.style.display = fmt.value === "SVG" ? "" : "none";
+      };
+      var id = card.getAttribute("data-icon");
+      var o = iconOpts(id);
+
+      // Written straight back to state, without a re-render: the DOM already
+      // shows the change, and Export all reads state.
+      fmt.onchange = function () { o.fmt = fmt.value; sync(); };
+      scale.onchange = function () { o.scale = parseFloat(scale.value || "1"); };
+      sync();
+
+      function rowFor(format) {
+        var r = iconRow(id);
+        r.format = format;
+        return r;
+      }
+
+      var more = card.querySelector("[data-icon-more]");
+      if (more) more.onclick = function (ev) { ev.stopPropagation(); o.open = !o.open; renderBody(); };
+
+      [["data-icon-patch", "patchStroke"], ["data-icon-label", "labelParts"],
+       ["data-icon-hidden", "dropInvisible"], ["data-icon-clip", "cleanClip"],
+       ["data-icon-svgid", "svgIdAttribute"],
+       ["data-icon-svgstroke", "svgSimplifyStroke"],
+       ["data-icon-svgtext", "svgOutlineText"], ["data-icon-contents", "contentsOnly"]]
+        .forEach(function (pair) {
+          var el = card.querySelector("[" + pair[0] + "]");
+          if (el) el.onclick = function (ev) { ev.stopPropagation(); o[pair[1]] = !o[pair[1]]; renderBody(); };
+        });
+
+      card.querySelector("[data-exp]").onclick = function (ev) {
+        ev.stopPropagation();
+        post({ type: "export-run", runId: startRun("download"), nodeId: id,
+               rows: [rowFor(fmt.value)] });
+      };
+      copyBtn.onclick = function (ev) {
+        ev.stopPropagation();
+        post({ type: "export-run", runId: startRun("copy"), nodeId: id,
+               rows: [rowFor("SVG")] });
+      };
+    });
+
+    // Export all and its settings. Every icon goes out in one run, so the
+    // results come back as a single zip rather than N blocked downloads.
+    var expAll = main.querySelector("[data-export-all]");
+    if (expAll && d && d.icons && d.icons.length) {
+      var a = iconAllOpts();
+
+      var allFmt = main.querySelector("[data-all-fmt]");
+      if (allFmt) allFmt.onchange = function (ev) {
+        ev && ev.stopPropagation && ev.stopPropagation();
+        a.fmt = allFmt.value;
+        applyToAllIcons(d, "fmt", a.fmt);
+        renderBody();                       // cards and the scale control follow
+      };
+      var allScale = main.querySelector("[data-all-scale]");
+      if (allScale) allScale.onchange = function (ev) {
+        ev && ev.stopPropagation && ev.stopPropagation();
+        a.scale = parseFloat(allScale.value || "1");
+        applyToAllIcons(d, "scale", a.scale);
+        renderBody();
+      };
+      var allMore = main.querySelector("[data-all-more]");
+      if (allMore) allMore.onclick = function (ev) {
+        ev.stopPropagation(); a.open = !a.open; renderBody();
+      };
+      [["data-all-patch", "patchStroke"], ["data-all-label", "labelParts"],
+       ["data-all-hidden", "dropInvisible"], ["data-all-clip", "cleanClip"],
+       ["data-all-svgid", "svgIdAttribute"], ["data-all-svgstroke", "svgSimplifyStroke"],
+       ["data-all-svgtext", "svgOutlineText"], ["data-all-contents", "contentsOnly"]]
+        .forEach(function (pair) {
+          var el = main.querySelector("[" + pair[0] + "]");
+          if (el) el.onclick = function (ev) {
+            ev.stopPropagation();
+            a[pair[1]] = !a[pair[1]];
+            applyToAllIcons(d, pair[1], a[pair[1]]);
+            renderBody();
+          };
+        });
+
+      // Paging keeps the rendered card count flat; every setting and Export all
+      // still act on the whole list, not just what is on screen.
+      main.querySelectorAll("[data-icon-page]").forEach(function (b) {
+        b.onclick = function (ev) {
+          ev.stopPropagation();
+          if (b.disabled) return;
+          var pages = iconPageCount(d);
+          var next = iconPageIndex(d) + (b.getAttribute("data-icon-page") === "next" ? 1 : -1);
+          S.iconPage = Math.min(Math.max(0, next), pages - 1);
+          renderBody();
+          // A new page starts at its top, not wherever the last one was left.
+          var tb = main.querySelector("[data-tabbody]");
+          if (tb) tb.scrollTop = 0;
+        };
+      });
+
+      expAll.onclick = function (ev) {
+        ev.stopPropagation();
+        post({
+          type: "export-batch",
+          runId: startRun("download", safeFile(S.node ? S.node.name : "icons")),
+          items: d.icons.map(function (ic) {
+            return { nodeId: ic.nodeId, row: iconRow(ic.nodeId) };
+          }),
+        });
+      };
+    }
+  }
+
+  /* ---------------- export handling ---------------- */
+
+  var EXT  = { SVG: "svg", PNG: "png", JPG: "jpg", PDF: "pdf" };
+  var MIME = { SVG: "image/svg+xml;charset=utf-8", PNG: "image/png",
+               JPG: "image/jpeg", PDF: "application/pdf" };
+
+  // A run is opened before posting and closed by "export-done". Results are
+  // held until then, because a plugin iframe is only allowed ONE automatic
+  // download per gesture — firing several drops all but the first, however far
+  // apart they are spaced. So many files leave as a single zip, the same thing
+  // Figma's own multi-asset export does.
+  function startRun(mode, zipName) {
+    var id = ++S.runSeq;
+    S.runs[id] = { files: [], mode: mode, zipName: zipName || "export" };
+    return id;
+  }
+
+  function handleExport(msg) {
+    var run = S.runs[msg.runId];
+    if (!run) return;                       // a run we already closed
+    if (run.mode === "copy") {
+      copyText(msg.svg !== undefined ? msg.svg : new TextDecoder().decode(msg.bytes));
+      return;
+    }
+    // A patched SVG comes back as a string; everything else as bytes.
+    run.files.push(msg.svg !== undefined
+      ? { name: msg.name + ".svg", bytes: utf8(msg.svg), mime: MIME.SVG }
+      : { name: msg.name + "." + (EXT[msg.format] || "png"), bytes: msg.bytes,
+          mime: MIME[msg.format] || MIME.PNG });
+  }
+
+  // Counting up on the button itself, patched in place: a re-render per icon
+  // would be hundreds of full redraws. S.exporting keeps the truth so any
+  // render that does happen mid-run still shows the right label.
+  function showExportProgress(msg) {
+    if (!S.runs[msg.runId]) return;
+    S.exporting = { done: msg.done, total: msg.total };
+    var btn = main.querySelector("[data-export-all]");
+    if (btn) btn.textContent = t("exportingN")(msg.done, msg.total);
+  }
+
+  function finishExport(msg) {
+    var run = S.runs[msg.runId];
+    delete S.runs[msg.runId];
+    var wasRunning = !!S.exporting;
+    S.exporting = null;
+    if (wasRunning) renderBody();
+    if (!run || run.mode === "copy" || !run.files.length) return;
+    if (run.files.length === 1) {
+      var f = run.files[0];
+      download(new Blob([f.bytes], { type: f.mime }), f.name);
+      return;
+    }
+    // A very large batch can run the tab out of memory building one buffer.
+    // Failing loudly beats a button that quietly does nothing.
+    var archive;
+    try {
+      archive = zip(run.files);
+    } catch (e) {
+      post({ type: "notify", message: t("exportTooBig") });
+      return;
+    }
+    download(new Blob([archive], { type: "application/zip" }), run.zipName + ".zip");
+  }
+
+  /* --- a minimal store-only zip writer: no dependencies, and SVG/PNG payloads
+         gain little from deflate anyway --- */
+
+  function utf8(str) {
+    var out = [];
+    for (var i = 0; i < str.length; i++) {
+      var c = str.charCodeAt(i);
+      if (c < 0x80) out.push(c);
+      else if (c < 0x800) out.push(0xC0 | (c >> 6), 0x80 | (c & 63));
+      else if (c >= 0xD800 && c <= 0xDBFF && i + 1 < str.length) {
+        var cp = 0x10000 + ((c - 0xD800) << 10) + (str.charCodeAt(++i) - 0xDC00);
+        out.push(0xF0 | (cp >> 18), 0x80 | ((cp >> 12) & 63), 0x80 | ((cp >> 6) & 63), 0x80 | (cp & 63));
+      } else out.push(0xE0 | (c >> 12), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+    }
+    return new Uint8Array(out);
+  }
+
+  var CRC_TABLE = null;
+  function crc32(bytes) {
+    if (!CRC_TABLE) {
+      CRC_TABLE = [];
+      for (var i = 0; i < 256; i++) {
+        var c = i;
+        for (var k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+        CRC_TABLE[i] = c >>> 0;
+      }
+    }
+    var crc = 0xFFFFFFFF;
+    for (var j = 0; j < bytes.length; j++) {
+      crc = (crc >>> 8) ^ CRC_TABLE[(crc ^ bytes[j]) & 0xFF];
+    }
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+
+  // Entry names are UTF-8 with the 0x0800 flag set, which is what the spec
+  // says and what Finder, Windows and current tools all read. The `unzip`
+  // binary macOS still ships is Info-ZIP 5.52, which predates that flag and
+  // mangles non-ASCII names; the Info-ZIP Unicode Path extra field doesn't help
+  // (it still prefers the name field), and the only encoding that satisfies it
+  // replaces every non-ASCII character with an underscore. A correct name that
+  // one obsolete tool misreads beats a destroyed name everywhere.
+  function zip(files) {
+    // Two icons can share a name; a zip with duplicate entries unpacks badly.
+    var used = {}, entries = files.map(function (f) {
+      var name = f.name;
+      if (used[name]) {
+        var dot = name.lastIndexOf(".");
+        var stem = dot > 0 ? name.slice(0, dot) : name;
+        var ext = dot > 0 ? name.slice(dot) : "";
+        name = stem + " (" + (++used[f.name]) + ")" + ext;
+      } else used[name] = 1;
+      return { nameBytes: utf8(name), bytes: f.bytes, crc: crc32(f.bytes) };
+    });
+
+    var total = 22;
+    entries.forEach(function (e) { total += 30 + e.nameBytes.length + e.bytes.length + 46 + e.nameBytes.length; });
+
+    var buf = new Uint8Array(total), dv = new DataView(buf.buffer), o = 0;
+    function u32(v) { dv.setUint32(o, v, true); o += 4; }
+    function u16(v) { dv.setUint16(o, v, true); o += 2; }
+    function raw(b) { buf.set(b, o); o += b.length; }
+
+    entries.forEach(function (e) {
+      e.offset = o;
+      u32(0x04034b50); u16(20); u16(0x0800); u16(0);   // flag 0x800 = UTF-8 names
+      u16(0); u16(0);                                   // no meaningful timestamp
+      u32(e.crc); u32(e.bytes.length); u32(e.bytes.length);
+      u16(e.nameBytes.length); u16(0);
+      raw(e.nameBytes); raw(e.bytes);
+    });
+
+    var cdStart = o;
+    entries.forEach(function (e) {
+      u32(0x02014b50); u16(20); u16(20); u16(0x0800); u16(0);
+      u16(0); u16(0);
+      u32(e.crc); u32(e.bytes.length); u32(e.bytes.length);
+      u16(e.nameBytes.length); u16(0); u16(0);
+      u16(0); u16(0); u32(0);
+      u32(e.offset);
+      raw(e.nameBytes);
+    });
+
+    // Capture the directory's extent BEFORE the trailer starts moving o along,
+    // or its reported size comes out as long as the trailer written so far.
+    var cdSize = o - cdStart;
+    u32(0x06054b50); u16(0); u16(0);
+    u16(entries.length); u16(entries.length);
+    u32(cdSize); u32(cdStart); u16(0);
+    return buf;
+  }
+
+  function safeFile(name) {
+    return String(name || "export").replace(/[\\/:*?"<>|]+/g, "-").replace(/^\.+/, "").slice(0, 60) || "export";
+  }
+
+  function download(blob, filename) {
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  /* ---------------- language ---------------- */
+
+  function applyLang() {
+    $("apptitle").textContent = t("title");
+    render(); // renderNavbar redraws the language toggle from S.lang
+  }
+
+  function setLang(l) {
+    if (S.lang === l) return;
+    S.lang = l;
+    post({ type: "set-lang", lang: l });
+    applyLang();
+  }
+  $("refresh").onclick = function () { post({ type: "refresh" }); };
+
+  // A wheel scroll slides rows under a stationary pointer, firing mouseenter on
+  // each one — that would thrash the canvas selection and, when a queued state
+  // flushed, re-render mid-scroll. Lock hovering until the pointer really moves.
+  // Never re-render mid-scroll: replacing innerHTML kills the browser's scroll
+  // momentum, and restoring scrollTop afterwards then fights it.
+  main.addEventListener("scroll", function () {
+    hideTip();
+    S.hoverLock = true;   // rows sliding under a still pointer must not preview
+    cancelHover();
+    S.scrolling = true;
+    if (S.scrollTimer) clearTimeout(S.scrollTimer);
+    S.scrollTimer = setTimeout(function () {
+      S.scrolling = false;
+      S.scrollTimer = null;
+      flushPending();
+    }, 180);
+  }, true);
+
+  // Real pointer movement releases the scroll hover-lock. A DOM swap fires
+  // mouseenter but never mousemove, which is exactly what we want to ignore.
+  document.addEventListener("mousemove", function () {
+    if (S.hoverLock && !S.dragging) S.hoverLock = false;
+  }, true);
+
+  // The pointer can leave without a row's mouseleave arriving (fast exits, the
+  // window losing focus); without this the canvas would keep the preview.
+  document.addEventListener("mouseleave", function () { endHover(); });
+  window.addEventListener("blur", function () { endHover(); });
+
+  applyLang();
+  post({ type: "ready" });
+</script>
+</body>
+</html>

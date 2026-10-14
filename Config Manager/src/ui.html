@@ -1,0 +1,2171 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+/* @ds:begin — generated from doc/design-system. Edit there, then run `node scripts/sync-ds.mjs`. */
+/* =========================================================================
+   Figma Plugins — Shared Design Tokens
+   Source of truth: doc/design-system/. Synced into each plugin by
+   `node scripts/sync-ds.mjs` (see doc/design-system/README.md).
+   =========================================================================
+   Foundation layer: colors, type, resets. Load this before components.css.
+
+   These are Figma plugin UI tokens: every color variable maps to a
+   `--figma-color-*` CSS variable that the Figma desktop app injects at
+   runtime (so the UI auto-matches the user's light/dark theme), with a
+   static fallback for contexts where that variable isn't defined (e.g.
+   previewing this file outside a Figma plugin iframe).
+
+   If you're building a plain web app (not a Figma plugin), just drop the
+   var(--figma-color-*, ...) wrapper and keep the fallback hex as the value.
+   ========================================================================= */
+
+:root {
+  /* ---- color: surfaces ---- */
+  --bg:        var(--figma-color-bg, #fff);              /* page / panel background */
+  --bg-2:      var(--figma-color-bg-secondary, #f5f5f5);  /* recessed surface: headers, code blocks, field backgrounds */
+  --bg-hover:  var(--figma-color-bg-hover, #f0f0f0);      /* hover state for rows, buttons, tabs */
+  --bg-sel:    var(--figma-color-bg-selected, #e5f0ff);   /* selected / active row background */
+
+  /* ---- color: borders & text ---- */
+  --border:    var(--figma-color-border, #e6e6e6);
+  --text:      var(--figma-color-text, #1a1a1a);          /* primary text */
+  --text-2:    var(--figma-color-text-secondary, #888);   /* secondary / muted text, labels, hints */
+  --text-3:    var(--figma-color-text-tertiary, #b3b3b3); /* faint text: prefixes, placeholders, chevrons */
+  --bg-3:      var(--figma-color-bg-tertiary, #e9e9e9);   /* pills, switch track, scrollbar thumb */
+
+  /* ---- color: brand & semantic ---- */
+  --brand:      var(--figma-color-bg-brand, #0d99ff);     /* primary action, active states, focus accents */
+  --brand-text: var(--figma-color-text-onbrand, #fff);    /* text/icon color on top of --brand */
+  --text-brand: var(--figma-color-text-brand, #007be5);   /* brand-colored text on a normal surface (links, aliases) */
+  --red:        var(--figma-color-text-danger, #f24822);  /* error text */
+  /* Status surfaces are mixed from the text color rather than taken from Figma's
+     bg-*-secondary tokens, which are solid fills in the dark theme. */
+  --red-bg:     color-mix(in srgb, var(--red) 12%, var(--bg));   /* error surface (tint) */
+  --red-solid:  var(--figma-color-bg-danger, #f24822);     /* destructive fill (danger button, danger menu hover) */
+  --warn:       var(--figma-color-text-warning, #b86200);  /* warning text */
+  --warn-bg:    color-mix(in srgb, var(--warn) 14%, var(--bg));  /* warning surface (tint) */
+  --success:    var(--figma-color-icon-success, #14ae5c);  /* "live" / ok indicator dot */
+
+  /* ---- elevation (floating layers only: tooltip, menu, dialog) ---- */
+  --shadow-float: 0 8px 24px rgba(0, 0, 0, .3);
+  --scrim:        rgba(0, 0, 0, .35);
+
+  /* ---- typography ---- */
+  --font-ui:   Inter, -apple-system, system-ui, sans-serif;
+  --mono:      ui-monospace, Menlo, Consolas, monospace;
+
+  /* ---- type scale (used inline throughout components.css) ----
+     11px  – secondary/meta text (counts, hints, table sub-lines)
+     12px  – base body size (default on <html>)
+     13px  – panel title
+     Weights: 400 body, 500 buttons/tabs/labels, 600 emphasis/headings */
+}
+
+/* Two extra reference-only tokens some UI components below hard-code by hex
+   rather than a --figma-* variable, because they're Figma editor accent
+   colors (component purple, slot pink) rather than theme-adaptive tokens.
+   Keep them literal if you copy those components. */
+:root {
+  --figma-component-purple: #8a38f5;
+  --figma-slot-pink: #ff45c0;
+}
+
+* { box-sizing: border-box; }
+
+/* Native scrollbars render light-on-light in dark theme, so paint them from
+   theme tokens instead. color-scheme covers overlay scrollbars some
+   platforms draw; the webkit rules cover the rest. */
+html { color-scheme: light dark; }
+::-webkit-scrollbar { width: 11px; height: 11px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background-color: var(--figma-color-bg-tertiary, #c9c9cd);
+  border: 3px solid transparent;
+  border-radius: 6px;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover { background-color: var(--text-2); background-clip: padding-box; }
+
+/* Figma injects its theme <style> ahead of the plugin's HTML, so the page runs
+   in quirks mode, where tables don't inherit font size (they fall back to 16px). */
+table { font-size: inherit; }
+
+html, body {
+  margin: 0; padding: 0; height: 100%;
+  font-family: var(--font-ui);
+  font-size: 12px; color: var(--text); background: var(--bg);
+}
+
+/* =========================================================================
+   Figma Plugins — Shared Component Library
+   =========================================================================
+   Source of truth: doc/design-system/. Do not edit the copy inside a plugin's
+   ui.html (between the @ds markers) — edit here, then `node scripts/sync-ds.mjs`.
+   Load tokens.css first. Every color/spacing value here references a
+   variable from tokens.css — don't hard-code new hex values into a
+   component; add a token instead so both files stay themeable.
+
+   General conventions used throughout:
+   - Border radius: 4px (xs controls) / 5-6px (default) / 50% (circular icon buttons)
+   - Border: 1px solid var(--border) almost everywhere
+   - Font sizes: 11px (meta/secondary), 12px (body/default), 13px (title)
+   - Font weights: 400 (body), 500 (interactive labels), 600 (emphasis)
+   - Hover = var(--bg-hover) background swap, no color/shadow tricks
+   - Active/selected = var(--bg-sel) background + var(--brand) border
+   ========================================================================= */
+
+body { display: flex; flex-direction: column; height: 100vh; }
+
+/* ---- app header ---- */
+header {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 8px 12px; border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+header .hrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+header .title { font-weight: 600; font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* right-hand cluster of the top row: actions, then the language toggle last */
+.hactions { display: flex; align-items: center; gap: 6px; margin-left: auto; flex-shrink: 0; }
+
+/* ---- segmented control (e.g. language switch, unit toggle) ---- */
+.lang-toggle, .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.lang-btn, .seg-btn {
+  border: none; border-radius: 0; padding: 4px 11px; font-size: 12px;
+  background: var(--bg); color: var(--text-2); font-weight: 500; cursor: pointer;
+}
+.seg-btn { padding: 4px 10px; font-size: 11px; font-family: var(--mono); }
+.seg-btn + .seg-btn { border-left: 1px solid var(--border); }
+.lang-btn.active, .seg-btn.active { background: var(--brand); color: var(--brand-text); }
+.seg-btn.active { font-weight: 600; }
+.lang-btn:hover:not(.active), .seg-btn:hover:not(.active) { background: var(--bg-hover); }
+
+/* ---- layout shell: header / scrolling body ---- */
+/* `main` itself never scrolls — only `.tabbody` does, so scrolling inside a
+   tab can't drag the whole panel. */
+main {
+  flex: 1; min-height: 0; padding: 0; position: relative;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.top-fixed { flex-shrink: 0; padding: 12px 12px 0; }
+.tabbody { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; }
+
+.muted { color: var(--text-2); }
+.center-msg {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; height: 100%; gap: 10px; color: var(--text-2); padding: 24px;
+}
+.empty-pane {
+  height: 100%; display: flex; align-items: center; justify-content: center;
+  color: var(--text-2); text-align: center; padding: 8px;
+}
+.empty { padding: 34px 18px; text-align: center; color: var(--text-2); line-height: 1.5; }
+.empty .empty-t { font-weight: 600; color: var(--text); margin-bottom: 4px; font-size: 12px; }
+
+/* ---- buttons ---- */
+button {
+  padding: 7px 12px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--bg); color: var(--text); font-family: inherit; font-size: 12px;
+  cursor: pointer; font-weight: 500;
+}
+button:hover:not(:disabled) { background: var(--bg-hover); }
+button:disabled { opacity: 0.38; cursor: default; }
+button.primary { background: var(--brand); color: var(--brand-text); border-color: var(--brand); }
+button.primary:hover:not(:disabled) { filter: brightness(1.05); }
+button.ghost { border-color: transparent; background: transparent; color: var(--text-2); }
+button.ghost:hover:not(:disabled) { background: var(--bg-hover); }
+button.full { width: 100%; }
+button.sm { padding: 4px 8px; }
+/* Secondary note inside a button, e.g. the scope of an action: "토큰 정리 · 현재 페이지" */
+button .scope { color: var(--text-2); font-weight: 400; }
+button .scope::before { content: '· '; }
+button.xs { padding: 3px 7px; font-size: 11px; border-radius: 4px; }
+
+.icon-btn {
+  width: 30px; height: 26px; padding: 0; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.icon-btn svg { width: 22px; height: 22px; display: block; }
+
+/* ---- breadcrumb / back bar (navigation history) ---- */
+.navbar {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 10px; background: var(--bg-2);
+  border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.navbar .trail {
+  flex: 1; min-width: 0; font-size: 11px; color: var(--text); font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.navbtn {
+  width: 26px; height: 26px; padding: 0; border-radius: 50%; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border); background: var(--bg); color: var(--text);
+}
+.navbtn svg { width: 15px; height: 15px; display: block; }
+.navbtn:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--text-2); }
+.navbar .lang-toggle, header .lang-toggle { flex-shrink: 0; }
+/* the language toggle is always compact in the top row (header or navbar) */
+.navbar .lang-btn, header .lang-btn { padding: 2px 8px; font-size: 11px; }
+
+/* ---- floating tooltip ---- */
+/* position:fixed and outside scroll containers, so a pane with overflow:auto
+   can't clip it. */
+.tip {
+  position: fixed; z-index: 200; max-width: 250px;
+  background: var(--figma-color-bg-inverse, #1e1e1e);
+  color: var(--figma-color-text-oninverse, #fff);
+  padding: 7px 9px; border-radius: 6px; font-size: 11px; line-height: 1.45;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .3); pointer-events: none;
+}
+.tinfo {
+  width: 11px; height: 11px; margin-left: 4px; flex-shrink: 0;
+  display: inline-flex; align-items: center; vertical-align: -1px;
+  opacity: .8; cursor: help; pointer-events: auto;
+}
+.tinfo:hover { opacity: 1; }
+.tinfo svg { width: 100%; height: 100%; display: block; }
+
+/* ---- resizable panes (drag handle, like a layers panel) ---- */
+.rbox { position: relative; }
+.rbox-body { overflow-y: auto; overflow-x: hidden; }
+.rhandle {
+  height: 11px; margin: 0 0 4px; cursor: ns-resize; user-select: none;
+  display: flex; align-items: center; justify-content: center;
+}
+.rhandle::after {
+  content: ""; width: 30px; height: 2px; border-radius: 2px;
+  background: var(--border); transition: background .1s ease;
+}
+.rhandle:hover::after { background: var(--text-2); }
+
+/* ---- tabs ---- */
+.tabs {
+  display: flex; gap: 2px; margin: 0 -12px 0; padding: 0 10px;
+  background: var(--bg); border-bottom: 1px solid var(--border);
+}
+.tab {
+  border: none; background: transparent; border-radius: 0; margin-bottom: -1px;
+  padding: 9px 10px; font-size: 12px; font-weight: 500; color: var(--text-2);
+  border-bottom: 2px solid transparent; cursor: pointer;
+  display: flex; align-items: center; gap: 5px; white-space: nowrap;
+}
+.tab:hover:not(:disabled) { background: transparent; }
+.tab:hover:not(:disabled):not(.active) { color: var(--text); }
+.tab.active { color: var(--text); font-weight: 600; border-bottom-color: var(--brand); }
+.tab:disabled { opacity: .35; cursor: default; }
+.tab .tb {
+  font-size: 10px; font-weight: 600; color: var(--text-2);
+  background: var(--figma-color-bg-tertiary, #e9e9e9);
+  border-radius: 8px; padding: 0 6px; line-height: 15px;
+}
+.tab.active .tb { color: var(--text); }
+
+/* ---- collapsible section ---- */
+.sec { margin: 0 -12px; }
+.sec-head {
+  position: sticky; top: -12px; z-index: 5;
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 12px; background: var(--bg-2);
+  border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+  font-weight: 600; font-size: 12px; cursor: pointer; user-select: none;
+}
+.sec-head:hover { background: var(--bg-hover); }
+.sec-head .caret {
+  width: 15px; flex-shrink: 0; color: var(--text-2); font-size: 14px;
+  line-height: 1; transition: transform .1s ease; display: inline-block;
+  transform-origin: 45% 50%;
+}
+.sec-head.closed .caret { transform: rotate(-90deg); }
+.sec-head .sc { color: var(--text-2); font-weight: 400; }
+.sec-actions { margin-left: auto; display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.sec-actions button { font-weight: 500; }
+.sec-actions .mini {
+  padding: 2px 4px; font-size: 11px; border: 1px solid var(--border);
+  border-radius: 5px; background: var(--bg); color: var(--text);
+  font-family: inherit; font-weight: 500;
+}
+.sec-actions .mini:disabled { opacity: .45; }
+.sec-body { padding: 8px 12px 10px; }
+.sec-body.hidden { display: none; }
+
+/* ---- property row (label / value pair) ---- */
+.prow { display: flex; align-items: baseline; gap: 8px; padding: 2px 0; line-height: 1.5; }
+.prow .pk { color: var(--text-2); width: 104px; flex-shrink: 0; }
+.prow .pv { flex: 1; min-width: 0; word-break: break-word; }
+.prow.flag .pv { color: var(--brand); font-weight: 600; }
+.copy { cursor: pointer; border-radius: 3px; padding: 1px 3px; margin: 0 -3px; }
+.copy:hover { background: var(--bg-hover); }
+.mono { font-family: var(--mono); }
+
+/* ---- token pill (e.g. a bound variable name) ---- */
+.tok {
+  display: inline-block; margin-left: 6px; font-size: 11px; font-family: var(--mono);
+  padding: 1px 6px; border-radius: 4px; word-break: break-all; cursor: pointer;
+  background: var(--figma-color-bg-tertiary, #e9e9e9);
+  color: var(--text); border: 1px solid var(--border);
+}
+.tok:hover { background: var(--bg-hover); border-color: var(--text-2); }
+.tok-none {
+  display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 4px;
+  color: var(--text-2); border: 1px dashed var(--border); font-style: italic;
+}
+
+/* ---- swatch (color preview square) ---- */
+.sw {
+  width: 10px; height: 10px; border-radius: 2px; border: 1px solid var(--border);
+  display: inline-block; vertical-align: -1px; margin-right: 5px; flex-shrink: 0;
+}
+
+/* checkerboard background for translucent/transparent content previews */
+.checker {
+  background-color: #f0f0f2;
+  background-image:
+    linear-gradient(45deg, #dededf 25%, transparent 25%, transparent 75%, #dededf 75%),
+    linear-gradient(45deg, #dededf 25%, transparent 25%, transparent 75%, #dededf 75%);
+  background-size: 10px 10px;
+  background-position: 0 0, 5px 5px;
+}
+
+/* ---- labeled field chip (e.g. layout inspector: "W 240") ---- */
+.lp { display: flex; flex-direction: column; gap: 8px; }
+.lp-row { display: flex; align-items: flex-start; gap: 8px; }
+.lp-row .lp-label { width: 96px; flex-shrink: 0; color: var(--text-2); padding-top: 5px; line-height: 1.3; }
+.lp-fields { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.lp-fields.cols4 { display: grid; grid-template-columns: repeat(4, 1fr); flex-wrap: nowrap; }
+.lp-fields.cols4 .lp-field { min-width: 0; }
+.lp-fields.cols4 .lp-fv { overflow: hidden; text-overflow: ellipsis; }
+.lp-field {
+  display: inline-flex; align-items: center; gap: 5px; min-width: 0;
+  padding: 4px 7px; border: 1px solid var(--border); border-radius: 5px;
+  background: var(--bg-2); max-width: 100%;
+}
+.lp-field .lp-fk {
+  font-size: 10px; font-weight: 600; color: var(--text-2); flex-shrink: 0;
+  letter-spacing: .02em; text-transform: uppercase;
+}
+.lp-field .lp-fv { font-family: var(--mono); word-break: break-all; }
+.lp-field .lp-fm { color: var(--text-2); font-size: 11px; flex-shrink: 0; }
+.lp-field .tok { margin-left: 1px; }
+.lp-ic { width: 12px; height: 12px; flex-shrink: 0; color: var(--text-2); display: inline-flex; }
+.lp-ic svg { width: 100%; height: 100%; display: block; }
+
+/* ---- checkbox row (custom checkbox, ticks/toggles) ---- */
+.lp-check, .hcheck {
+  display: inline-flex; align-items: center; gap: 6px; color: var(--text-2);
+}
+.hcheck { gap: 5px; flex-shrink: 0; padding: 2px 5px; border-radius: 4px; cursor: pointer; user-select: none; font-weight: 500; }
+.hcheck:hover { background: var(--bg-hover); color: var(--text); }
+.hcheck.on { color: var(--text); }
+.lp-check .box, .hcheck .box {
+  width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--border);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 9px; line-height: 1; flex-shrink: 0; background: var(--bg);
+}
+.lp-check.on .box, .hcheck.on .box { background: var(--brand); border-color: var(--brand); color: var(--brand-text); }
+.lp-check.on { color: var(--text); }
+
+/* ---- subsection divider inside a section (e.g. Fill / Stroke groups) ---- */
+.subsec {
+  font-weight: 600; margin: 12px 0 6px; padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.subsec:first-child { margin-top: 0; padding-top: 0; border-top: none; }
+
+/* ---- data table ---- */
+.tr-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 6px; }
+/* table-layout:fixed makes a dragged column width land exactly */
+.tr-table { border-collapse: separate; border-spacing: 0; min-width: 100%; font-size: 12px; table-layout: fixed; }
+.tr-table th, .tr-table td {
+  padding: 6px 9px; text-align: left; vertical-align: top;
+  border-bottom: 1px solid var(--border); white-space: pre-wrap; overflow-wrap: break-word;
+}
+.tr-table tr:last-child th, .tr-table tr:last-child td { border-bottom: none; }
+.tr-table thead th {
+  background: var(--bg-2); font-weight: 600; position: sticky; top: 0; z-index: 2;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tr-table thead th .tr-def { color: var(--text-2); font-weight: 400; font-size: 11px; }
+.tr-name {
+  position: sticky; left: 0; z-index: 1; background: var(--bg);
+  font-weight: 600; word-break: break-all; border-right: 1px solid var(--border);
+}
+.tr-desc { color: var(--text-2); font-weight: 400; word-break: break-word; border-right: 1px solid var(--border); }
+.tr-desc.none { color: var(--text-2); opacity: .55; }
+.tr-table thead .tr-name { z-index: 3; background: var(--bg-2); }
+.tr-table tbody tr { cursor: pointer; }
+.tr-table tbody td:hover, .tr-table tbody .tr-name:hover { background: var(--bg-hover); }
+.tr-table td.empty { color: var(--red); font-style: italic; }
+.tr-sub { color: var(--text-2); font-weight: 400; font-size: 11px; margin-top: 2px; }
+/* copy affordance revealed on cell hover */
+.cp-ic { margin-left: 5px; color: var(--text-2); visibility: hidden; font-size: 11px; }
+.tr-table td:hover .cp-ic, .tr-table .tr-name:hover .cp-ic { visibility: visible; }
+/* column resize handle */
+.colres { position: absolute; top: 0; right: -4px; bottom: 0; width: 9px; cursor: col-resize; z-index: 6; }
+.colres::after {
+  content: ""; position: absolute; left: 4px; top: 0; bottom: 0; width: 1px;
+  background: var(--brand); opacity: 0; transition: opacity .1s ease;
+}
+.colres:hover::after, .colres.on::after { opacity: 1; }
+.tr-pad { padding: 0 !important; }
+
+/* ---- form controls ---- */
+select, .exp-num, .exp-suffix {
+  padding: 5px 6px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); color: var(--text); font-family: inherit; font-size: 12px;
+}
+select { font-size: 11px; cursor: pointer; }
+select:disabled { opacity: .4; cursor: default; }
+.exp-num { width: 56px; padding: 5px 6px; }
+
+/* range slider */
+.thumb-size {
+  width: 64px; height: 20px; margin: 0 3px; padding: 0; cursor: pointer; flex-shrink: 0;
+  -webkit-appearance: none; appearance: none; background: transparent;
+}
+.thumb-size::-webkit-slider-runnable-track { height: 5px; border-radius: 3px; background: var(--text-2); opacity: .5; }
+.thumb-size:hover::-webkit-slider-runnable-track { opacity: .75; }
+.thumb-size::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; margin-top: -4px;
+  width: 13px; height: 13px; border-radius: 50%;
+  background: var(--brand); cursor: pointer;
+  border: 2px solid var(--bg); box-shadow: 0 0 0 1px var(--text-2);
+}
+
+/* ---- card ---- */
+.card { border: 1px solid var(--border); border-radius: 6px; padding: 7px 9px; margin-bottom: 6px; }
+.card-head { display: flex; align-items: center; gap: 6px; }
+.card-head .ch-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.card-head .ch-sub { color: var(--text-2); font-size: 11px; }
+.card.own { border-color: var(--brand); }
+.card.clickable { cursor: pointer; }
+.card.clickable:hover { background: var(--bg-hover); }
+/* selected/picked state, reused for tree rows and cards alike */
+.picked { background: var(--bg-sel) !important; border-color: var(--brand) !important; border-radius: 6px; }
+
+/* ---- header/summary card (e.g. an inspected item's identity block) ---- */
+.var-head { background: var(--bg-2); border-radius: 6px; padding: 8px 10px; }
+.var-head .leaf { font-weight: 600; word-break: break-all; }
+.var-head .grp { color: var(--text-2); font-size: 11px; word-break: break-all; margin-top: 3px; }
+.var-head .desc {
+  margin-top: 7px; padding-top: 7px; border-top: 1px solid var(--border);
+  color: var(--text-2); line-height: 1.45; white-space: pre-wrap; word-break: break-word;
+}
+.badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.badge {
+  font-size: 11px; padding: 1px 7px; border-radius: 10px;
+  background: var(--bg); border: 1px solid var(--border); color: var(--text-2);
+}
+.badge.b-main { background: var(--bg); border-color: var(--text-2); color: var(--text); font-weight: 600; }
+.head-actions { display: flex; gap: 6px; margin-top: 8px; }
+.head-actions button { flex: 1; }
+
+/* ---- style pill (e.g. a picked text/fill/effect style) ---- */
+.style-pill {
+  display: flex; align-items: center; gap: 6px; width: 100%;
+  padding: 7px 9px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); cursor: pointer; text-align: left; margin-bottom: 6px;
+}
+.style-pill:hover { background: var(--bg-hover); }
+.style-pill .sp-name { flex: 1; min-width: 0; font-weight: 600; word-break: break-all; }
+.style-pill .sp-hint { color: var(--text-2); font-size: 11px; flex-shrink: 0; }
+.sp-icon {
+  width: 15px; height: 15px; flex-shrink: 0; color: var(--text-2);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.sp-icon svg { width: 100%; height: 100%; display: block; }
+.thidden { font-size: 11px; color: var(--text-2); flex-shrink: 0; }
+
+/* ---- tree row (nested, expandable list — e.g. a layer/component tree) ---- */
+.trow {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 6px; border-radius: 6px; cursor: pointer; border: 1px solid transparent;
+  user-select: none;
+}
+.trow:hover { background: var(--bg-hover); }
+.trow.current { cursor: default; }
+.trow.self { background: var(--bg-sel); border-color: var(--brand); }
+.trow.origin { background: var(--bg-sel); border-color: var(--brand) !important; }
+.trow .tname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trow .tsub { color: var(--text-2); font-size: 11px; flex-shrink: 0; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trow .tglyph { flex-shrink: 0; color: var(--text-2); font-size: 11px; }
+.tkids { margin-left: 9px; padding-left: 8px; border-left: 1px solid var(--border); }
+.tcount { color: var(--text-2); font-size: 11px; flex-shrink: 0; }
+.tcaret {
+  width: 17px; height: 17px; flex-shrink: 0; text-align: center; color: var(--text-2);
+  font-size: 14px; line-height: 17px; cursor: pointer; border-radius: 3px;
+  transform-origin: 45% 50%;
+}
+.tcaret:hover { background: var(--bg-hover); color: var(--text); }
+.tcaret.closed { transform: rotate(-90deg); }
+.tcaret.leaf { cursor: default; opacity: 0; }
+/* secondary action revealed only on hover of its row */
+.trow .tmain { visibility: hidden; }
+.trow:hover .tmain, .trow.current .tmain { visibility: visible; }
+
+/* ---- thumbnail (with checkerboard for transparency) ---- */
+.tthumb, .icon-prev {
+  flex-shrink: 0; border: 1px solid var(--border); border-radius: 3px; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+}
+.tthumb {
+  margin-right: 2px;
+  background-color: #f0f0f2;
+  background-image:
+    linear-gradient(45deg, #dededf 25%, transparent 25%, transparent 75%, #dededf 75%),
+    linear-gradient(45deg, #dededf 25%, transparent 25%, transparent 75%, #dededf 75%);
+  background-size: 8px 8px; background-position: 0 0, 4px 4px;
+}
+.tthumb img, .icon-prev img { max-width: 100%; max-height: 100%; display: block; }
+.icon-prev {
+  width: 44px; height: 44px; margin-right: 9px; border-radius: 4px;
+  background-color: #f0f0f2;
+  background-image:
+    linear-gradient(45deg, #dededf 25%, transparent 25%, transparent 75%, #dededf 75%),
+    linear-gradient(45deg, #dededf 25%, transparent 25%, transparent 75%, #dededf 75%);
+  background-size: 10px 10px; background-position: 0 0, 5px 5px;
+}
+.icon-prev img { max-width: 82%; max-height: 82%; }
+
+/* ---- category tags (fixed brand colors — match Figma's own editor accents) ---- */
+/* Slot pink, matching the color Figma gives slots in the editor. */
+.tslot {
+  flex-shrink: 0; font-size: 10px; font-weight: 600; line-height: 16px;
+  text-transform: uppercase; letter-spacing: .03em; padding: 0 6px; border-radius: 8px;
+  color: var(--figma-slot-pink); background: rgba(255, 69, 192, .14); border: 1px solid rgba(255, 69, 192, .45);
+}
+/* Component purple, matching the color Figma gives components in the editor. */
+.tvariant {
+  flex-shrink: 0; font-size: 10px; font-weight: 600; line-height: 16px;
+  text-transform: uppercase; letter-spacing: .03em; padding: 0 6px; border-radius: 8px;
+  color: var(--figma-component-purple); background: rgba(138, 56, 245, .14); border: 1px solid rgba(138, 56, 245, .5);
+}
+.text-badge {
+  flex-shrink: 0; font-size: 10px; font-weight: 600; line-height: 16px;
+  text-transform: uppercase; letter-spacing: .03em; padding: 0 6px; border-radius: 8px;
+  color: var(--text-2); border: 1px solid var(--border); background: var(--bg-2);
+}
+
+/* ---- auto layout direction widget ---- */
+.al-widget { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.al-grid {
+  width: 46px; height: 46px; flex-shrink: 0; padding: 4px;
+  display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr);
+  border: 1px solid var(--border); border-radius: 4px; background: var(--bg-2);
+}
+.al-cell { display: flex; align-items: center; justify-content: center; }
+.al-cell .dot { width: 2px; height: 2px; border-radius: 50%; background: var(--text-2); opacity: .55; }
+.al-bars { display: flex; align-items: center; justify-content: center; gap: 2px; }
+.al-bars.spread { justify-content: space-between; }
+.al-bars.h { flex-direction: row; height: 100%; }
+.al-bars.v { flex-direction: column; width: 100%; }
+.al-bar { background: var(--brand); border-radius: 1px; }
+.al-bars.h .al-bar { width: 3px; height: 9px; }
+.al-bars.v .al-bar { width: 9px; height: 3px; }
+.al-caption .al-dir { font-weight: 600; }
+.al-caption .al-sub { color: var(--text-2); font-size: 11px; margin-top: 2px; }
+
+/* ---- content / code preview box ---- */
+.content-box {
+  font-family: var(--mono); background: var(--bg-2); padding: 6px 8px;
+  border-radius: 4px; word-break: break-word; white-space: pre-wrap; max-height: 120px; overflow-y: auto;
+}
+.detail-box { border-left: 2px solid var(--border); padding: 4px 0 4px 10px; margin: 0 0 8px 4px; }
+.hidden-flag { color: var(--text-2); font-size: 11px; }
+
+/* ---- pagination ---- */
+.pager {
+  position: sticky; top: 22px; z-index: 4;
+  display: flex; align-items: center; gap: 6px;
+  margin: 0 -12px 8px; padding: 6px 12px;
+  background: var(--bg); border-bottom: 1px solid var(--border);
+}
+.pager .pgbtn { display: inline-flex; align-items: center; padding: 2px 5px; }
+.pager .pgbtn svg { width: 13px; height: 13px; display: block; }
+.pager .pgbtn:disabled { opacity: .35; cursor: default; }
+.pg-n { font-weight: 600; font-size: 11px; }
+.pg-range { margin-left: auto; color: var(--text-2); font-size: 11px; }
+
+/* ---- misc row/list primitives seen across panels ---- */
+.paint-row { display: flex; align-items: baseline; flex-wrap: wrap; padding: 2px 0; line-height: 1.5; }
+.paint-row .pv-line { width: 100%; }
+.pv-line { margin-top: 3px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.pv-line .tok { margin-left: 0; }
+.arrow { color: var(--text-2); flex-shrink: 0; }
+.sc-row { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border: 1px solid transparent; border-radius: 6px; cursor: pointer; }
+.sc-row:hover { background: var(--bg-hover); }
+.sc-sw {
+  width: 16px; height: 16px; border-radius: 4px; flex-shrink: 0; border: 1px solid var(--border);
+  background-image:
+    linear-gradient(45deg, #c8c8cc 25%, transparent 25%, transparent 75%, #c8c8cc 75%),
+    linear-gradient(45deg, #c8c8cc 25%, transparent 25%, transparent 75%, #c8c8cc 75%);
+  background-size: 8px 8px; background-position: 0 0, 4px 4px; background-color: #fff;
+  position: relative; overflow: hidden;
+}
+.sc-sw i { position: absolute; inset: 0; display: block; }
+.sc-val { font-family: var(--mono); flex-shrink: 0; }
+.sc-mid { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.sc-count { color: var(--text-2); font-size: 11px; flex-shrink: 0; }
+.eff-item { padding: 4px 0 0; }
+.eff-item + .eff-item { border-top: 1px dashed var(--border); margin-top: 4px; }
+.eff-title { display: flex; align-items: center; gap: 6px; }
+.eff-title .et-label { font-weight: 500; }
+.eff-title .et-sum { color: var(--text-2); font-family: var(--mono); font-size: 11px; word-break: break-all; }
+
+/* ---- Export-panel specific composites ---- */
+.exp-row { display: flex; align-items: center; gap: 4px; margin-bottom: 6px; flex-shrink: 0; }
+.exp-row .grow { flex: 1; min-width: 0; }
+.exp-row select { min-width: 0; }
+.dots { letter-spacing: 1px; padding: 4px 6px; }
+.dots.on { color: var(--brand); background: var(--bg-sel); }
+.dots.has-opts:not(.on) { color: var(--text); }
+.exp-more { border: 1px solid var(--border); border-radius: 6px; padding: 8px 9px; margin: 0 0 8px; background: var(--bg-2); }
+.exp-more-t { font-weight: 600; margin-bottom: 6px; }
+.exp-more .pk { width: 92px; }
+.exp-more select, .exp-suffix { width: 100%; }
+.exp-checks { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.exp-more .hcheck { padding-left: 0; }
+.exp-preview { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 8px; }
+.exp-preview-box {
+  margin-top: 8px; padding: 10px; border: 1px solid var(--border); border-radius: 6px;
+  display: flex; align-items: center; justify-content: center; min-height: 60px;
+  background-color: #f0f0f2;
+  background-image:
+    linear-gradient(45deg, #dededf 25%, transparent 25%, transparent 75%, #dededf 75%),
+    linear-gradient(45deg, #dededf 25%, transparent 25%, transparent 75%, #dededf 75%);
+  background-size: 12px 12px; background-position: 0 0, 6px 6px;
+}
+.exp-preview-img { max-width: 100%; max-height: 220px; display: block; }
+.exp-controls { display: flex; gap: 6px; align-items: center; margin-top: 8px; }
+.exp-controls .grow { flex: 1; }
+.tok-opts { margin: 0 0 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+.tok-opts-head { display: flex; align-items: center; gap: 4px; color: var(--text-2); font-size: 11px; margin-bottom: 6px; }
+.all-opts { padding-top: 2px; }
+
+/* =========================================================================
+   Additions shared by i18n / Config Manager / Arrow Connect /
+   Change Marker. Same visual language as above: tokens only, 6px radius,
+   12px text, hover = --bg-hover, focus/selected = --brand.
+   ========================================================================= */
+
+/* ---- text inputs ---- */
+input:not([type]), input[type="text"], input[type="password"], input[type="number"],
+input[type="search"], input[type="date"], textarea {
+  padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); color: var(--text); font-family: inherit; font-size: 12px;
+  min-width: 0;
+}
+textarea { line-height: 1.4; resize: vertical; }
+input:not([type]):focus, input[type="text"]:focus, input[type="password"]:focus, input[type="number"]:focus,
+input[type="search"]:focus, input[type="date"]:focus, textarea:focus, select:focus { outline: none; border-color: var(--brand); }
+input:disabled, textarea:disabled { opacity: .4; }
+input.invalid, textarea.invalid { border-color: var(--red); }
+::placeholder { color: var(--text-3); }
+/* borderless until hovered — inline rename fields */
+input.bare { border-color: transparent; background: transparent; }
+input.bare:hover { border-color: var(--border); }
+input.bare:focus { border-color: var(--brand); background: var(--bg); }
+
+/* labeled field: small muted label above its control */
+.field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+.field > label, .field > .lbl { color: var(--text-2); font-size: 11px; font-weight: 500; }
+.field-err { color: var(--red); font-size: 11px; }
+
+/* ---- semantic buttons ---- */
+button.danger { color: var(--red); }
+button.danger-fill { background: var(--red-solid); border-color: var(--red-solid); color: var(--brand-text); }
+button.danger-fill:hover:not(:disabled) { background: var(--red-solid); filter: brightness(1.05); }
+button.selected { background: var(--bg-sel); border-color: transparent; color: var(--text-brand); }
+button.selected:disabled { opacity: 1; }
+
+/* ---- small pills: warning / danger / link variants of .badge ---- */
+.badge.warn { background: var(--warn-bg); border-color: transparent; color: var(--warn); }
+.badge.danger { background: var(--red-bg); border-color: transparent; color: var(--red); }
+.badge.link { background: var(--bg-sel); border-color: transparent; color: var(--text-brand); cursor: pointer; }
+
+/* ---- inline notices ---- */
+.notice {
+  display: flex; align-items: center; gap: 8px; padding: 7px 9px; margin-bottom: 8px;
+  border: 1px dashed var(--border); border-radius: 6px; color: var(--text-2); font-size: 11px; line-height: 1.4;
+}
+.notice > span:not(.ico) { flex: 1; }
+/* Colored text on a tinted surface is hard to read (especially in dark mode),
+   so status notices keep body text at --text and carry the color in a left bar. */
+.notice.err, .notice.warn, .notice.info {
+  border-style: solid; border-width: 1px 1px 1px 3px; color: var(--text); font-size: 12px; line-height: 1.45;
+}
+.notice.err { border-color: var(--red); background: var(--red-bg); }
+.notice.warn { border-color: var(--warn); background: var(--warn-bg); }
+.notice.info { border-color: var(--border); border-left-color: var(--brand); background: var(--bg-2); }
+.notice .ico { flex: 0 0 14px; width: 14px; height: 14px; margin-top: 1px; }
+.notice.err .ico { color: var(--red); }
+.notice.warn .ico { color: var(--warn); }
+
+/* ---- toast (in-panel, bottom) ---- */
+.toast {
+  position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 60;
+  padding: 8px 10px; border-radius: 6px; font-size: 12px; white-space: pre-line;
+  background: var(--red-bg); color: var(--red); display: none;
+}
+.toast.show { display: block; }
+.toast.warn { background: var(--warn-bg); color: var(--warn); }
+
+/* ---- modal dialog (Figma's iframe blocks window.confirm/prompt) ---- */
+.overlay {
+  position: fixed; inset: 0; z-index: 100; padding: 16px;
+  background: var(--scrim); display: flex; align-items: center; justify-content: center;
+}
+.dialog {
+  width: 100%; max-width: 360px; padding: 12px; border-radius: 6px;
+  background: var(--bg); border: 1px solid var(--border); box-shadow: var(--shadow-float);
+  display: flex; flex-direction: column; gap: 12px;
+}
+.dialog input { width: 100%; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 6px; }
+
+/* ---- dropdown menu (dark, like Figma's own menus) ---- */
+.menu {
+  position: fixed; z-index: 110; min-width: 200px; max-width: 320px; padding: 6px;
+  background: var(--figma-color-bg-menu, #1e1e1e); color: var(--figma-color-text-menu, #fff);
+  border-radius: 6px; box-shadow: var(--shadow-float);
+  font-size: 12px; line-height: 18px; display: flex; flex-direction: column;
+}
+.menu input[type="text"] {
+  background: rgba(255, 255, 255, .08); border-color: transparent; color: inherit; margin-bottom: 4px;
+}
+.menu input[type="text"]:focus { border-color: var(--brand); }
+.menu-list { overflow-y: auto; }
+.menu-group { padding: 6px 8px 2px; font-size: 11px; opacity: .55; }
+.menu-item { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
+.menu-item .meta { margin-left: auto; opacity: .55; font-size: 11px; white-space: nowrap; }
+.menu-item .check { width: 12px; flex: none; text-align: center; }
+.menu-item:hover, .menu-item.active { background: var(--brand); color: var(--brand-text); }
+.menu-item:hover .meta, .menu-item.active .meta { opacity: .85; }
+.menu-item.danger { color: var(--figma-color-text-menu-danger, #ff8a7a); }
+.menu-item.danger:hover, .menu-item.danger.active { background: var(--red-solid); color: var(--brand-text); }
+.menu-empty { padding: 8px; opacity: .6; }
+.menu-sep { height: 1px; margin: 4px 2px; background: rgba(255, 255, 255, .12); }
+
+/* ---- toggle switch (on <input type=checkbox class=switch> or a <span>) ---- */
+.switch {
+  appearance: none; -webkit-appearance: none; position: relative; flex: none; margin: 0; cursor: pointer;
+  width: 28px; height: 16px; border-radius: 8px; background: var(--bg-3); transition: background .12s;
+}
+.switch::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 6px;
+  background: var(--figma-color-icon-onbrand, #fff); box-shadow: 0 1px 2px rgba(0, 0, 0, .25); transition: left .12s;
+}
+.switch:checked, .switch.on { background: var(--brand); }
+.switch:checked::after, .switch.on::after { left: 14px; }
+.switch:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+/* ---- window resize grip (bottom-right; plugin resizes itself via figma.ui.resize) ---- */
+.resize-grip {
+  position: fixed; right: 0; bottom: 0; width: 14px; height: 14px; cursor: nwse-resize; z-index: 120;
+  background: linear-gradient(135deg, transparent 50%, var(--text-3) 50%, var(--text-3) 58%, transparent 58%,
+    transparent 70%, var(--text-3) 70%, var(--text-3) 78%, transparent 78%);
+}
+
+/* ---- busy spinner ---- */
+.spin {
+  width: 13px; height: 13px; border-radius: 50%; flex-shrink: 0; display: inline-block;
+  border: 2px solid var(--border); border-top-color: var(--brand); animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---- footer bar ---- */
+.foot {
+  flex-shrink: 0; padding: 8px 12px; border-top: 1px solid var(--border);
+  font-size: 11px; color: var(--text-2); line-height: 1.4;
+}
+/* @ds:end */
+
+  /* ---- Config Manager only (shared pieces come from the block above) ---- */
+  button, input, select { font: inherit; color: inherit; }
+
+  /* Top bar: tabs on the left, language toggle at the right end */
+  nav { display: flex; align-items: center; gap: 2px; padding: 0 12px 0 10px; height: 40px; border-bottom: 1px solid var(--border); flex: none; }
+  nav .tab { height: 40px; }
+  nav .lang-btn { padding: 2px 8px; font-size: 11px; }
+  .spacer { flex: 1; }
+  /* This plugin's body scrolls as a whole (no tab body), unlike the shared shell. */
+  main { display: block; flex: 1; overflow: auto; padding: 12px 12px 24px; }
+
+  /* Typography + layout */
+  h2 { font-size: 13px; line-height: 20px; font-weight: 600; margin: 0; }
+  .faint { color: var(--text-3); }
+  .small { font-size: 11px; line-height: 15px; }
+  .row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .grow { flex: 1; min-width: 0; }
+  .stack { display: flex; flex-direction: column; gap: 12px; }
+  .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* Buttons: shared <button> look at the compact sizes this dense UI needs
+     (.btn ≈ shared .sm, .btn.sm ≈ shared .xs). */
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 4px 8px; white-space: nowrap; flex: none; }
+  .btn.ghost { color: var(--text); }
+  .btn.icon { width: 26px; height: 26px; padding: 0; }
+  .btn.sm { padding: 2px 6px; font-size: 11px; border-radius: 4px; }
+  .btn.sm.icon { width: 20px; height: 20px; padding: 0; }
+  .btn.selected .ico { color: inherit; }
+  input[type=text], select { height: 26px; padding: 0 8px; }
+  select { padding-right: 2px; font-size: 12px; }
+  .title-input { font-weight: 600; font-size: 13px; height: 28px; }
+  label.field { margin-bottom: 0; }
+  label.field > input, label.field > select, label.field > .row { color: var(--text); flex: none; }
+
+  /* Cards + lists */
+  .card { padding: 12px; margin-bottom: 0; }
+  .list { display: flex; flex-direction: column; gap: 6px; }
+  .item {
+    border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; cursor: pointer;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .item:hover { background: var(--bg-hover); }
+  .item .name { font-weight: 600; }
+  .empty { padding: 40px 24px; }
+  .empty p { margin: 0 0 6px; }
+  .toolbar { display: flex; align-items: center; gap: 6px; }
+  .hint { color: var(--text-2); background: var(--bg-2); border-radius: 6px; padding: 8px 10px; }
+
+  /* Detail header */
+  .detail-head { display: flex; align-items: center; gap: 4px; }
+  .detail-head .prefix { color: var(--text-3); padding-left: 2px; }
+
+  /* Page preview bar: which config mode the current page shows */
+  .page-bar {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; padding: 10px 12px;
+    border: 1px solid var(--border); border-radius: 6px; background: var(--bg-2);
+  }
+  .page-bar .lead { display: flex; align-items: center; gap: 6px; color: var(--text-2); white-space: nowrap; }
+  .page-bar .lead b { color: var(--text); font-weight: 600; max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+  .page-bar .note { flex-basis: 100%; color: var(--text-2); }
+  /* Segmented control with the shared .seg look; mode names, so not monospace */
+  .seg { flex-wrap: wrap; background: var(--bg); }
+  .seg button { height: auto; padding: 4px 10px; border: 0; border-radius: 0; background: var(--bg); color: var(--text-2); white-space: nowrap; }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button:hover:not(.on):not(:disabled) { background: var(--bg-hover); color: var(--text); }
+  .seg button.on { background: var(--brand); color: var(--brand-text); font-weight: 600; cursor: default; opacity: 1; }
+  .seg button.none.on { background: var(--bg-2); color: var(--text); }
+  /* The column whose values are live on the page */
+  table.grid th.live, table.grid td.live { background: color-mix(in srgb, var(--brand) 9%, var(--bg)); }
+  table.grid tbody tr:hover td.live { background: color-mix(in srgb, var(--brand) 14%, var(--bg)); }
+  .live-tag {
+    flex: none; margin-left: 4px; padding: 0 7px; line-height: 16px; border-radius: 10px; font-size: 11px; font-weight: 600;
+    background: var(--brand); color: var(--brand-text);
+  }
+
+  /* Dropdown menu: shared .menu; icons keep the menu's text color */
+  .menu-item .ico { color: inherit; opacity: .8; }
+
+  /* Grid — mirrors Figma's variables table */
+  .grid-wrap { overflow-x: auto; margin: 0 -12px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  table.grid { border-collapse: separate; border-spacing: 0; width: 100%; table-layout: fixed; }
+  table.grid col.c-add { width: 40px; }
+  table.grid th { position: relative; }
+  table.grid th:first-child { position: sticky; }
+  .col-resizer { position: absolute; top: 0; right: 0; width: 7px; height: 100%; cursor: col-resize; z-index: 3; }
+  .col-resizer::after { content: ''; position: absolute; top: 0; bottom: 0; right: 0; width: 2px; background: transparent; }
+  .col-resizer:hover::after, .col-resizer.active::after { background: var(--brand); }
+  body.resizing, body.resizing * { cursor: col-resize !important; user-select: none; }
+  table.grid th, table.grid td {
+    height: 40px; padding: 0 8px; border-bottom: 1px solid var(--border); background: var(--bg);
+    text-align: left; vertical-align: middle; overflow: hidden;
+  }
+  /* Header row and the create row use 11px, like Figma's own variables table */
+  table.grid th { font-size: 11px; font-weight: 500; color: var(--text); white-space: nowrap; background: var(--bg-2); }
+  table.grid th + th, table.grid td + td { border-left: 1px solid var(--border); }
+  table.grid th:first-child, table.grid td:first-child { position: sticky; left: 0; z-index: 1; padding-left: 16px; }
+  table.grid tbody tr:hover td { background: var(--bg-hover); }
+  /* Sticky edges: the label column pins left, the "+" column pins right. Their dividers are drawn on the
+     sticky cells themselves (inset shadow / own border) so they stay visible while columns scroll beneath. */
+  table.grid th:first-child, table.grid td:first-child { box-shadow: inset -1px 0 0 var(--border); }
+  table.grid th:nth-child(2), table.grid td:nth-child(2) { border-left: 0; }
+  table.grid tr.create-row td { box-shadow: none; }
+  table.grid th.add, table.grid td.add { padding: 0; text-align: center; position: sticky; right: 0; z-index: 1; }
+  table.grid tr.create-row td { border-bottom: 0; padding: 0; }
+  table.grid tr.create-row:hover td { background: var(--bg); }
+  .create-btn, .create-btn:hover:not(:disabled) {
+    display: flex; align-items: center; gap: 8px; width: 100%; height: 40px; padding: 0 16px; border: 0; border-radius: 0;
+    background: none; color: var(--text); text-align: left; font-size: 11px; font-weight: 500;
+  }
+  .create-btn:hover:not(:disabled) { background: var(--bg-hover); }
+  .create-btn:disabled { color: var(--text-3); opacity: 1; }
+  .ico { width: 16px; height: 16px; flex: none; display: inline-flex; color: var(--text-2); }
+  .ico svg { width: 16px; height: 16px; }
+  .colhead { display: flex; align-items: center; min-width: 0; }
+  .colhead input { flex: 1; width: 0; font-size: 11px; font-weight: 500; color: var(--text); height: 26px; padding: 0 6px; margin-left: -6px; }
+  .name-cell { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .name-cell input { flex: 1; width: 0; height: 26px; padding: 0 6px; font-weight: 500; }
+  .name-cell .text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 6px; font-weight: 500; }
+  .name-cell .text.missing { color: var(--red); }
+  .hover-only { visibility: hidden; }
+  tr:hover .hover-only, th:hover .hover-only, .hover-only:focus-visible { visibility: visible; }
+  table.grid td.cell > input[type=text] { width: 100%; height: 26px; padding: 0 6px; }
+  .value-btn, .value-btn:hover:not(:disabled) {
+    display: flex; align-items: center; gap: 6px; width: 100%; height: 28px; padding: 0 6px; border: 1px solid transparent;
+    border-radius: 6px; background: none; color: var(--text); text-align: left; font-weight: 400;
+  }
+  .value-btn:hover:not(:disabled) { border-color: var(--border); }
+  .value-btn .chev { margin-left: auto; visibility: hidden; color: var(--text-2); }
+  .value-btn:hover .chev { visibility: visible; }
+  .value-btn.invalid { color: var(--red); border-color: var(--red); }
+  .bool { display: flex; align-items: center; gap: 8px; padding-left: 6px; cursor: pointer; }
+  .color-val { display: flex; align-items: center; gap: 8px; padding-left: 6px; font-family: var(--mono); }
+  .color-val input[type=color] {
+    -webkit-appearance: none; appearance: none; width: 16px; height: 16px; padding: 0; border: 1px solid var(--border);
+    border-radius: 4px; background: none; cursor: pointer; flex: none;
+  }
+  .color-val input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
+  .color-val input[type=color]::-webkit-color-swatch { border: 0; border-radius: 3px; }
+  .alias { color: var(--text-brand); padding-left: 6px; display: block; }
+  .problem { color: var(--red); padding-left: 6px; display: block; }
+
+  /* Component-linked presets */
+  .sel-card {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 12px;
+    border: 1px solid var(--border); border-radius: 6px; background: var(--bg-2);
+  }
+  .sel-card .who { display: flex; align-items: center; gap: 6px; flex: 1 1 220px; min-width: 0; }
+  .sel-card .who b { font-weight: 600; flex: none; max-width: 70%; }
+  .sel-card .acts { display: flex; gap: 6px; margin-left: auto; }
+  .comp-row { display: flex; align-items: center; gap: 6px; color: var(--text-2); }
+  .comp-row .btn { max-width: 60%; }
+  .comp-row .btn .ellipsis { min-width: 0; }
+  .issues { display: flex; flex-direction: column; gap: 6px; }
+  .sec-title { font-size: 11px; font-weight: 600; color: var(--text-2); }
+  .title-text { font-weight: 600; font-size: 13px; padding-left: 4px; }
+  .flag { flex: none; color: var(--warn); font-size: 11px; cursor: default; }
+  .name-cell .add-prop { flex: none; }
+  /* A property without a token yet: faded until hovered; editing a value creates the token */
+  table.grid tr.unadded .name-cell .text, table.grid tr.unadded td.cell > * { opacity: .5; }
+  table.grid tr.unadded:hover .name-cell .text, table.grid tr.unadded:hover td.cell > * { opacity: 1; }
+</style>
+</head>
+<body>
+<nav>
+  <button class="tab" data-tab="configs"></button>
+  <button class="tab" data-tab="presets"></button>
+  <div class="spacer"></div>
+  <div class="lang-toggle" id="langToggle"></div>
+</nav>
+<main id="main"></main>
+<div id="toast" class="toast"></div>
+<div id="resize" class="resize-grip"></div>
+
+<script>
+// ---------------------------------------------------------------------------
+// Messaging
+// ---------------------------------------------------------------------------
+let requestSeq = 0;
+const pending = new Map();
+function send(type, payload = {}) {
+  const requestId = ++requestSeq;
+  parent.postMessage({ pluginMessage: { type, requestId, ...payload } }, '*');
+  return new Promise((resolve) => pending.set(requestId, resolve));
+}
+async function act(type, payload) {
+  const res = await send(type, payload);
+  if (!res.ok) showToast(res.error);
+  else if (res.warnings && res.warnings.length) showToast(res.warnings.join('\n'), true);
+  return res;
+}
+
+let state = { presets: [], configs: [] };
+let applied = { target: '', configs: {} };
+let selectedTableOf = null; // collection whose canvas table is currently selected
+let compDetail = null; // live component info for the open preset (componentDetail in code.ts)
+let watched = null; // preset id the main thread is watching
+let selComp = null; // component (or an instance's main component) selected on the canvas; see selectedComponent() in code.ts
+const ui = { tab: 'configs', configId: null, presetId: null, creating: false, search: '', dragging: false, report: null, fromReport: false, cleaning: false,
+  editing: false, selected: new Set(), configSearch: '', configReport: false, fromConfigReport: false };
+
+// Column widths per collection, like Figma's variables table. Saved in Figma's per-user plugin storage
+// (the plugin iframe has no reliable localStorage); the main thread sends them back on launch.
+const LABEL_W = 200, MODE_W = 200, MIN_W = { label: 120, mode: 80 };
+let colWidths = {};
+const widthOf = (cid, colId) => colWidths[`${cid}:${colId}`] || (colId === 'label' ? LABEL_W : MODE_W);
+function saveWidth(cid, colId, w) {
+  colWidths[`${cid}:${colId}`] = w;
+  parent.postMessage({ pluginMessage: { type: 'saveColWidths', widths: colWidths } }, '*');
+}
+
+window.onmessage = (e) => {
+  const msg = e.data.pluginMessage;
+  if (!msg) return;
+  if (msg.type === 'state') { state = msg.state; render(); }
+  else if (msg.type === 'reveal') reveal(msg.collectionId);
+  else if (msg.type === 'selectedTable') {
+    if (selectedTableOf !== msg.collectionId) { selectedTableOf = msg.collectionId; render(); }
+  }
+  else if (msg.type === 'selection') {
+    const prev = selComp;
+    selComp = msg.component;
+    // Like i18n's key layer: selecting a component (or its instance) opens its preset.
+    if (ui.tab === 'presets' && selComp && selComp.presetId && selComp.presetId !== ui.presetId && (!prev || prev.id !== selComp.id)) go({ presetId: selComp.presetId });
+    else if (ui.tab === 'presets') render();
+  }
+  else if (msg.type === 'componentDetail') {
+    if (msg.presetId === watched) { compDetail = msg.detail; if (ui.tab === 'presets') render(); }
+  }
+  else if (msg.type === 'lang') { if (msg.lang !== lang) { lang = msg.lang; applyLang(); render(); } }
+  else if (msg.type === 'colWidths') { colWidths = msg.widths || {}; render(); }
+  else if (msg.type === 'applied') { applied = msg.applied; if (ui.tab === 'configs' && ui.configId) render(); }
+  else if (msg.type === 'result') {
+    const resolve = pending.get(msg.requestId);
+    if (resolve) { pending.delete(msg.requestId); resolve(msg); }
+  }
+};
+
+// ---------------------------------------------------------------------------
+// i18n — main-thread messages (toasts, errors) live in MSG in code.ts.
+// ---------------------------------------------------------------------------
+const I18N = {
+  ko: {
+    configs: 'Config', presets: 'Preset',
+    ok: '확인', cancel: '취소', delete: '삭제', add: '추가', create: '만들기', remove: '제거',
+    search: '검색…', nothingToAdd: '추가할 항목이 없습니다',
+    notString: 'STRING 변수가 아닙니다',
+    noCollectionNamed: (n) => `"${n}" collection이 없습니다`,
+    notAModeOf: (v, c) => `"${v}"은(는) ${c}의 mode가 아닙니다`,
+    noModeChosen: '선택된 mode 없음',
+    modesPlaceholder: '예: Mode A, Mode B', name: '이름', modesLabel: 'Mode (쉼표로 구분)',
+    redrawTable: '표 다시 그리기', removeTable: '캔버스에서 표 제거', deleteNamed: (n) => `${n} 삭제…`,
+    confirmRemoveTable: (n) => `캔버스에서 ${n} 표를 제거할까요? 이미 배치된 instance는 더 이상 업데이트되지 않습니다.`,
+    back: '뒤로', rename: '이름 변경', more: '더보기',
+    tableSelected: '표 선택됨', tableSelectedTitle: '이 표가 캔버스에서 선택되어 있습니다',
+    viewTable: '표 보기', viewTableTitle: '캔버스에서 이 표를 선택합니다. 표는 변수와 동기화된 상태로 유지됩니다.',
+    addTable: '캔버스에 표 추가', addTableTitle: '값이 변수에 연결된 표를 캔버스에 배치합니다. 처음이면 표 템플릿 component(config-manager-table-…)도 만듭니다.',
+    dragResize: '드래그해서 크기 조절',
+    renameMode: (n) => `"${n}" mode 이름 변경`,
+    onPage: '페이지 적용 중', onPageTitle: '이 값들이 현재 페이지에 적용되어 있습니다',
+    confirmRemoveMode: (n) => `"${n}" mode를 제거할까요? 이 mode의 값은 사라집니다.`,
+    removeMode: 'Mode 제거', newModeName: '새 mode 이름', addMode: 'Mode 추가',
+    newConfigBtn: '+ 새 config', newConfig: '새 config', configPlaceholder: '예: server',
+    noConfigs: '아직 config가 없습니다.',
+    noConfigsBody: 'Config는 preset마다 사용할 mode를 고르며, 서버나 언어 같은 상황마다 열이 하나씩 있습니다.',
+    nPresets: (n) => `Preset ${n}개`, tableOnCanvas: '캔버스에 표 있음', nInvalid: (n) => `잘못된 값 ${n}개`,
+    nModes: (n) => `Mode ${n}개`, otherCollections: '기타 collection',
+    previewBefore: '', previewAfter: '페이지에 다음 config 적용',
+    none: '없음', noneRestoreTitle: '페이지에 원래 있던 mode로 되돌립니다', noneRemoveTitle: '페이지에서 이 mode들을 제거합니다',
+    customTitle: '페이지의 mode가 어떤 열과도 일치하지 않습니다', custom: '사용자 지정',
+    confirmDeleteConfig: (n) => `${n}을(를) 삭제할까요? 변수 collection이 삭제됩니다.`,
+    preset: 'Preset', openPreset: 'Preset 열기', removeFromConfig: 'Config에서 제거', unset: '미설정',
+    addPreset: 'Preset 추가', noOtherCollections: '변수가 있는 다른 collection이 없습니다',
+    searchPresets: 'Preset 또는 token 검색', noPresets: '아직 preset이 없습니다.',
+    noPresetsBody: 'Preset은 component 하나에 연결된 변수 collection("preset-…")이며, token이 component 속성에 연결됩니다. 위에서 component를 선택해 만드세요.',
+    nothingMatches: (q) => `"${q}"와(과) 일치하는 항목이 없습니다.`,
+    nTokens: (n) => `Token ${n}개`,
+    selectHint: 'Component나 instance를 선택하면 그 component의 preset을 만들 수 있습니다.',
+    fromInstance: '선택한 instance의 main component',
+    createPresetFor: (n) => `${n} 만들기`, openNamed: (n) => `${n} 열기`,
+    linkExisting: '기존 preset 연결',
+    linkExistingTitle: 'Component가 없는 preset을 이 component에 연결합니다. 이름과 type이 같은 token은 해당 속성에 연결됩니다.',
+    noLinkable: 'Component가 없는 preset이 없습니다',
+    libraryComp: (n) => `"${n}"은(는) 라이브러리 component입니다. 원본 파일에서 preset을 만드세요.`,
+    noComponent: 'Component 없음', componentMissing: 'Component 삭제됨', nIssues: (n) => `정리 필요 ${n}개`,
+    locateTitle: '캔버스에서 component를 선택합니다',
+    unlinkedNotice: '이 preset은 component에 연결되어 있지 않습니다. Component나 instance를 선택한 뒤 연결하세요.',
+    missingNotice: (n) => `Component${n ? ` "${n}"` : ''}을(를) 찾을 수 없습니다. 삭제되었을 수 있습니다. 다른 component를 선택해 연결하거나 preset을 삭제하세요.`,
+    linkSelected: (n) => `"${n}"에 연결`,
+    componentLabel: 'Component', property: '속성', properties: '속성',
+    edit: '편집', done: '완료', selectAll: '모두 선택', selectNone: '선택 해제', deleteSelected: (n) => `삭제 (${n})`,
+    confirmDeleteConfigs: (n) => `Config ${n}개를 삭제할까요? 변수 collection이 삭제됩니다.`,
+    confirmDeletePresets: (n) => `Preset ${n}개를 삭제할까요? 변수 collection과 config의 해당 행이 삭제되고, component 속성 연결은 해제됩니다.`,
+    presetProblems: (n) => `Preset 문제 ${n}개`,
+    lastCheckTitle: '마지막 정리(또는 preset을 열었을 때) 기준입니다. Preset 정리로 다시 검사하세요.',
+    scopePage: '현재 페이지', scopeFile: '파일 전체',
+    searchConfigs: 'Config 또는 preset 검색', configCleanup: 'Config 정리',
+    configCleanupTitle: '모든 config의 행과 값을 변수 테이블 기준으로 검사합니다',
+    configReportTitle: 'Config 정리 결과', configReportSummary: (n) => `Config ${n}개 검사 (변수 테이블 기준, 실시간)`,
+    configReportClean: '정리할 config가 없습니다.',
+    configReportNote: 'Preset의 component 문제는 마지막 Preset 정리 기준입니다. 최신 상태는 Preset 탭에서 정리를 실행하세요.',
+    fromConfigReportNote: 'Config 정리 결과에서 연 config입니다.',
+    ciEmpty: 'Preset 행이 없습니다', ciType: (r) => `"${r}" 행이 STRING 변수가 아닙니다`,
+    ciGone: (r) => `"${r}": collection을 찾을 수 없습니다`, ciInvalid: (p, n) => `${p}: 잘못된 값 ${n}개`,
+    notAddedTitle: '값을 입력하면 token이 만들어지고 이 속성에 연결됩니다',
+    addWithDefaults: 'Component 기본값으로 token 추가',
+    otherBoundTitle: (o) => `지금은 다른 변수(${o})에 연결되어 있습니다. 값을 입력하면 이 preset의 token으로 바뀝니다.`,
+    issueUnbound: (n) => `"${n}" token이 속성에서 연결 해제되었습니다.`,
+    issueOther: (n, o) => `"${n}" token의 속성이 다른 변수(${o})에 연결되어 있습니다.`,
+    rebind: '다시 연결',
+    issueRenamed: (n, p) => `"${n}" token의 속성 이름이 "${p}"(으)로 바뀌었습니다.`,
+    renameToProp: 'Token 이름 맞추기',
+    issueOrphan: (n) => `"${n}" token에 해당하는 component 속성이 없습니다.`,
+    issueInvalid: (n, v) => `"${n}": "${v}"은(는) variant 옵션이 아닙니다.`,
+    noProps: '이 component에는 token을 연결할 수 있는 속성(Boolean·텍스트·variant)이 없습니다.',
+    kind: { BOOLEAN: 'Boolean', TEXT: '텍스트', VARIANT: 'Variant' },
+    confirmDeletePropToken: (n) => `"${n}" token을 삭제할까요? Component 속성은 연결이 해제되고 현재 값으로 남습니다.`,
+    cleanup: 'Preset 정리', cleanupTitle: '변수 테이블과 현재 페이지의 component를 검사합니다. 다른 페이지 component는 그 페이지에서 실행하세요.',
+    reportTitle: (p) => `“${p}” 페이지 정리 결과`, rerun: '다시 검사',
+    reportSummary: (n, b) => `이 페이지의 component ${n}개 검사${b ? ` · variant instance ${b}개 연결` : ''}`,
+    reportClean: '이 페이지에서 정리할 항목이 없습니다.',
+    secIssues: '정리가 필요한 preset', secMissing: 'Component가 삭제된 preset', secUnlinked: 'Component가 없는 preset',
+    secElsewhere: '다른 페이지의 component (검사하지 않음)', onPageNamed: (p) => `“${p}” 페이지`,
+    elsewhereHint: '항목을 누르면 그 페이지로 이동해 component를 선택합니다. 그곳에서 정리를 다시 실행하세요.',
+    fromReportNote: '정리 결과에서 연 preset입니다.', backToReport: '정리 결과로 돌아가기',
+    loadingComponent: 'Component를 읽는 중…',
+    templatesMissing: '표 템플릿 component(config-manager-table-…)가 삭제되어 캔버스 표가 갱신되지 않습니다.', restoreTemplates: '템플릿 다시 만들기',
+    type: { BOOLEAN: 'Boolean', STRING: '문자열', FLOAT: '숫자', COLOR: '색상' },
+    aliasTitle: '변수 테이블에서 별칭으로 연결됨', true: 'true', false: 'false', empty: '(비어 있음)',
+    confirmDeletePreset: (n, cfgs) => `${n}을(를) 삭제할까요? 변수 collection${cfgs ? `과 ${cfgs}의 해당 행` : ''}이 삭제됩니다. 이 token에 연결된 layer는 연결이 끊깁니다.`,
+    usedIn: '사용 위치', tokenId: 'Token ID',
+    confirmDeleteToken: (n) => `"${n}" token을 삭제할까요? 연결된 layer는 연결이 끊깁니다.`,
+    deleteToken: 'Token 삭제',
+  },
+  en: {
+    configs: 'Configs', presets: 'Presets',
+    ok: 'OK', cancel: 'Cancel', delete: 'Delete', add: 'Add', create: 'Create', remove: 'Remove',
+    search: 'Search…', nothingToAdd: 'Nothing to add',
+    notString: 'Not a string variable',
+    noCollectionNamed: (n) => `No collection named "${n}"`,
+    notAModeOf: (v, c) => `"${v}" is not a mode of ${c}`,
+    noModeChosen: 'No mode chosen',
+    modesPlaceholder: 'e.g. Mode A, Mode B', name: 'Name', modesLabel: 'Modes (comma separated)',
+    redrawTable: 'Redraw table', removeTable: 'Remove table from canvas', deleteNamed: (n) => `Delete ${n}…`,
+    confirmRemoveTable: (n) => `Remove the ${n} table from the canvas? Instances already placed will stop updating.`,
+    back: 'Back', rename: 'Rename', more: 'More',
+    tableSelected: 'Table selected', tableSelectedTitle: 'This table is selected on the canvas',
+    viewTable: 'View table', viewTableTitle: 'Select this table on the canvas. It stays in sync with the variables.',
+    addTable: 'Add table to canvas', addTableTitle: 'Place a table whose values are bound to the variables. The first time, this also creates the table template components (config-manager-table-…).',
+    dragResize: 'Drag to resize',
+    renameMode: (n) => `Rename mode "${n}"`,
+    onPage: 'On page', onPageTitle: 'These values are applied to the current page',
+    confirmRemoveMode: (n) => `Remove mode "${n}"? Values in this mode will be lost.`,
+    removeMode: 'Remove mode', newModeName: 'New mode name', addMode: 'Add mode',
+    newConfigBtn: '+ New config', newConfig: 'New config', configPlaceholder: 'e.g. server',
+    noConfigs: 'No configs yet.',
+    noConfigsBody: 'A config picks a mode for each preset, with one column per situation, such as a server or a language.',
+    nPresets: (n) => `${n} preset${n === 1 ? '' : 's'}`, tableOnCanvas: 'Table on canvas', nInvalid: (n) => `${n} invalid value${n === 1 ? '' : 's'}`,
+    nModes: (n) => `${n} mode${n === 1 ? '' : 's'}`, otherCollections: 'Other collections',
+    previewBefore: 'Configure', previewAfter: 'page to',
+    none: 'None', noneRestoreTitle: 'Put back the modes the page had before', noneRemoveTitle: 'Remove these modes from the page',
+    customTitle: "The page has modes for these presets that don't match any column", custom: 'Custom',
+    confirmDeleteConfig: (n) => `Delete ${n}? This removes the variable collection.`,
+    preset: 'Preset', openPreset: 'Open preset', removeFromConfig: 'Remove from config', unset: 'unset',
+    addPreset: 'Add preset', noOtherCollections: 'No other collections with variables',
+    searchPresets: 'Search presets or tokens', noPresets: 'No presets yet.',
+    noPresetsBody: "A preset is a variable collection (\"preset-…\") that belongs to one component, with its tokens bound to the component's properties. Select a component to create one.",
+    nothingMatches: (q) => `Nothing matches "${q}".`,
+    nTokens: (n) => `${n} token${n === 1 ? '' : 's'}`,
+    selectHint: 'Select a component or an instance to create a preset for that component.',
+    fromInstance: 'Main component of the selected instance',
+    createPresetFor: (n) => `Create ${n}`, openNamed: (n) => `Open ${n}`,
+    linkExisting: 'Link existing preset',
+    linkExistingTitle: 'Link a preset without a component to this one. Tokens whose name and type match a property are bound to it.',
+    noLinkable: 'No preset without a component',
+    libraryComp: (n) => `"${n}" is a library component. Create its preset in the library file.`,
+    noComponent: 'No component', componentMissing: 'Component deleted', nIssues: (n) => `${n} to clean up`,
+    locateTitle: 'Select the component on the canvas',
+    unlinkedNotice: "This preset isn't linked to a component. Select a component or an instance, then link it.",
+    missingNotice: (n) => `Component${n ? ` "${n}"` : ''} can't be found — it may have been deleted. Link another component, or delete the preset.`,
+    linkSelected: (n) => `Link to "${n}"`,
+    componentLabel: 'Component', property: 'Property', properties: 'Properties',
+    edit: 'Edit', done: 'Done', selectAll: 'Select all', selectNone: 'Deselect all', deleteSelected: (n) => `Delete (${n})`,
+    confirmDeleteConfigs: (n) => `Delete ${n} config${n === 1 ? '' : 's'}? This removes the variable collections.`,
+    confirmDeletePresets: (n) => `Delete ${n} preset${n === 1 ? '' : 's'}? This removes the variable collections and their rows in configs, and unbinds the component properties.`,
+    presetProblems: (n) => `${n} preset issue${n === 1 ? '' : 's'}`,
+    lastCheckTitle: 'As of the last cleanup (or when the preset was last open). Run Clean up presets to check again.',
+    scopePage: 'this page', scopeFile: 'whole file',
+    searchConfigs: 'Search configs or presets', configCleanup: 'Clean up configs',
+    configCleanupTitle: "Check every config's rows and values against the variable table",
+    configReportTitle: 'Config cleanup', configReportSummary: (n) => `Checked ${n} config${n === 1 ? '' : 's'} (variable table, live)`,
+    configReportClean: 'No configs to clean up.',
+    configReportNote: "Presets' component problems are as of the last preset cleanup. Run it in the Presets tab for the latest.",
+    fromConfigReportNote: 'Opened from the config cleanup.',
+    ciEmpty: 'No preset rows', ciType: (r) => `Row "${r}" is not a STRING variable`,
+    ciGone: (r) => `"${r}": collection not found`, ciInvalid: (p, n) => `${p}: ${n} invalid value${n === 1 ? '' : 's'}`,
+    notAddedTitle: 'Enter a value to create the token and bind it to this property',
+    addWithDefaults: "Add token with the component's defaults",
+    otherBoundTitle: (o) => `Currently bound to another variable (${o}). Entering a value replaces it with this preset's token.`,
+    issueUnbound: (n) => `Token "${n}" is no longer bound to its property.`,
+    issueOther: (n, o) => `The property of "${n}" is bound to another variable (${o}).`,
+    rebind: 'Bind again',
+    issueRenamed: (n, p) => `The property of "${n}" was renamed to "${p}".`,
+    renameToProp: 'Rename token',
+    issueOrphan: (n) => `Token "${n}" has no matching component property.`,
+    issueInvalid: (n, v) => `"${n}": "${v}" is not a variant option.`,
+    noProps: 'This component has no Boolean, text or variant properties to bind tokens to.',
+    kind: { BOOLEAN: 'Boolean', TEXT: 'Text', VARIANT: 'Variant' },
+    confirmDeletePropToken: (n) => `Delete token "${n}"? The component property is unbound and keeps its current value.`,
+    cleanup: 'Clean up presets', cleanupTitle: 'Check the variable table and the components on this page. Run it on other pages for their components.',
+    reportTitle: (p) => `Cleanup of page “${p}”`, rerun: 'Check again',
+    reportSummary: (n, b) => `Checked ${n} component${n === 1 ? '' : 's'} on this page${b ? ` · bound ${b} variant instance${b === 1 ? '' : 's'}` : ''}`,
+    reportClean: 'Nothing to clean up on this page.',
+    secIssues: 'Presets to clean up', secMissing: 'Presets whose component was deleted', secUnlinked: 'Presets without a component',
+    secElsewhere: 'Components on other pages (not checked)', onPageNamed: (p) => `page “${p}”`,
+    elsewhereHint: 'Click one to go to its page and select the component, then run the cleanup there.',
+    fromReportNote: 'Opened from the cleanup report.', backToReport: 'Back to cleanup report',
+    loadingComponent: 'Reading the component…',
+    templatesMissing: 'A table template component (config-manager-table-…) was deleted, so canvas tables stop updating.', restoreTemplates: 'Restore templates',
+    type: { BOOLEAN: 'Boolean', STRING: 'String', FLOAT: 'Number', COLOR: 'Color' },
+    aliasTitle: 'Aliased in the variables table', true: 'true', false: 'false', empty: '(empty)',
+    confirmDeletePreset: (n, cfgs) => `Delete ${n}? This removes the variable collection${cfgs ? ` and its rows in ${cfgs}` : ''}. Layers bound to its tokens will lose their links.`,
+    usedIn: 'Used in', tokenId: 'Token ID',
+    confirmDeleteToken: (n) => `Delete token "${n}"? Layers bound to it will lose their link.`,
+    deleteToken: 'Delete token',
+  },
+};
+let lang = 'ko';
+function t(key, ...args) {
+  const v = (I18N[lang] || I18N.ko)[key];
+  return typeof v === 'function' ? v(...args) : v;
+}
+function applyLang() {
+  document.querySelectorAll('nav .tab').forEach((b) => (b.textContent = t(b.dataset.tab)));
+  document.getElementById('resize').title = t('dragResize');
+  const lt = document.getElementById('langToggle');
+  lt.replaceChildren(...['ko', 'en'].map((id) => h('button', {
+    class: 'lang-btn' + (lang === id ? ' active' : ''),
+    onclick: () => {
+      if (lang === id) return;
+      lang = id;
+      parent.postMessage({ pluginMessage: { type: 'setLang', lang } }, '*');
+      applyLang();
+      render();
+    },
+  }, id === 'ko' ? '한국어' : 'EN')));
+}
+
+let toastTimer;
+function showToast(text, warn) {
+  const t = document.getElementById('toast');
+  t.textContent = text;
+  t.className = 'toast show' + (warn ? ' warn' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (t.className = 'toast'), 5000);
+}
+
+// ---------------------------------------------------------------------------
+// DOM helpers
+// ---------------------------------------------------------------------------
+function h(tag, attrs, ...children) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v === undefined || v === null || v === false) continue;
+    if (k.startsWith('on')) el.addEventListener(k.slice(2).toLowerCase(), v);
+    else if (k === 'class') el.className = v;
+    else if (k === 'value') el.value = v;
+    else if (k === 'checked') el.checked = v;
+    else el.setAttribute(k, v === true ? '' : v);
+  }
+  for (const c of children.flat()) {
+    if (c === null || c === undefined || c === false) continue;
+    el.append(c instanceof Node ? c : document.createTextNode(String(c)));
+  }
+  return el;
+}
+const btn = (label, onclick, cls = '', extra = {}) => h('button', { class: 'btn ' + cls, onclick, ...extra }, label);
+
+/** Text input that commits on Enter/blur only when changed. */
+function commitInput(value, onCommit, attrs = {}) {
+  const input = h('input', { type: 'text', value, ...attrs });
+  let committed = value;
+  const commit = () => {
+    if (input.value === committed) return;
+    committed = input.value;
+    onCommit(input.value);
+  };
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') input.blur();
+    if (e.key === 'Escape') { input.value = committed; input.blur(); }
+  });
+  input.addEventListener('blur', commit);
+  return input;
+}
+
+// Figma's plugin iframe blocks window.confirm/prompt, so use an in-page dialog.
+function dialog({ text, input, okLabel = t('ok'), danger }) {
+  return new Promise((resolve) => {
+    const field = input !== undefined ? h('input', { type: 'text', value: input }) : null;
+    const cancelValue = field ? null : false;
+    const close = (v) => { overlay.remove(); resolve(v); };
+    const ok = () => close(field ? field.value.trim() || null : true);
+    const overlay = h('div', { class: 'overlay', onclick: (e) => e.target === overlay && close(cancelValue) },
+      h('div', { class: 'dialog' },
+        h('div', {}, text),
+        field,
+        h('div', { class: 'dialog-actions' },
+          btn(t('cancel'), () => close(cancelValue), 'ghost'),
+          btn(okLabel, ok, danger ? 'danger-fill' : 'primary'))));
+    overlay.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') close(cancelValue);
+      if (e.key === 'Enter') { e.preventDefault(); ok(); }
+    });
+    document.body.append(overlay);
+    setTimeout(() => (field || overlay.querySelector('.btn:last-child')).focus(), 0);
+  });
+}
+const confirmAction = (text, okLabel = t('delete')) => dialog({ text, okLabel, danger: true });
+const promptText = (text, value = '', okLabel = t('add')) => dialog({ text, input: value, okLabel });
+
+const ICONS = {
+  table: '<rect x="2.5" y="3.5" width="11" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.1"/><path d="M2.5 6.5h11M6.5 6.5v6" stroke="currentColor" stroke-width="1.1"/>',
+  more: '<circle cx="4" cy="8" r="1.1" fill="currentColor"/><circle cx="8" cy="8" r="1.1" fill="currentColor"/><circle cx="12" cy="8" r="1.1" fill="currentColor"/>',
+  page: '<path d="M4.5 2.5h5l2.5 2.5v8.5h-7.5z" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"/><path d="M9.5 2.5V5H12" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"/>',
+  back: '<path d="M13 8H3.5M7.5 4L3.5 8l4 4" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>',
+  plus: '<path d="M8 3.5v9M3.5 8h9" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>',
+  chevron: '<path d="M5 6.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>',
+  COLOR: '<path d="M8 2.5a5.5 5.5 0 1 0 0 11c.8 0 1.2-.5 1.2-1.1 0-.7-.5-.9-.5-1.5 0-.6.5-1 1.1-1h1.3c1.4 0 2.4-1 2.4-2.4C13.5 4.6 11.1 2.5 8 2.5z" fill="none" stroke="currentColor" stroke-width="1.1"/><circle cx="5.3" cy="7.2" r=".8" fill="currentColor"/><circle cx="7.6" cy="5.2" r=".8" fill="currentColor"/><circle cx="10.4" cy="6" r=".8" fill="currentColor"/>',
+  FLOAT: '<rect x="2.5" y="2.5" width="11" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.1"/><path d="M6.5 5l-.8 6M10.3 5l-.8 6M5 7h6.2M4.7 9h6.2" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>',
+  STRING: '<rect x="2.5" y="2.5" width="11" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.1"/><path d="M5.5 5.5h5M8 5.5v5.5" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/>',
+  BOOLEAN: '<rect x="1.5" y="4.5" width="13" height="7" rx="3.5" fill="none" stroke="currentColor" stroke-width="1.1"/><circle cx="5" cy="8" r="1.8" fill="none" stroke="currentColor" stroke-width="1.1"/>',
+  collection: '<path d="M8 2.5l5.5 3L8 8.5l-5.5-3z" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"/><path d="M2.5 8L8 11l5.5-3M2.5 10.5L8 13.5l5.5-3" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"/>',
+  component: '<path d="M8 1.9l2.1 2.1L8 6.1 5.9 4zM8 9.9l2.1 2.1L8 14.1 5.9 12zM4 5.9L6.1 8 4 10.1 1.9 8zM12 5.9L14.1 8 12 10.1 9.9 8z" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"/>',
+  VARIANT: '<path d="M8 2.5L13.5 8 8 13.5 2.5 8z" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"/><path d="M8 5.5v5" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/>',
+};
+ICONS.TEXT = ICONS.STRING;
+function icon(name) {
+  const el = h('span', { class: 'ico' });
+  el.innerHTML = `<svg viewBox="0 0 16 16">${ICONS[name] || ''}</svg>`;
+  return el;
+}
+
+/** Dropdown menu (native <select> popups render tiny inside Figma).
+ *  groups: [{label?, items:[{id, label, meta?, icon?, checked?}]}] */
+let closeMenu = () => {};
+function openMenu(anchor, groups, onPick, { search = true, align = 'left' } = {}) {
+  closeMenu();
+  const filter = h('input', { type: 'text', placeholder: t('search'), style: search ? '' : 'position:absolute;opacity:0;pointer-events:none;height:0' });
+  const list = h('div', { class: 'menu-list' });
+  const menu = h('div', { class: 'menu' }, filter, list);
+  const hasChecks = groups.some((g) => g.items.some((it) => it.checked !== undefined));
+  let visible = [];
+  let active = search ? 0 : -1; // no pre-highlight without search, so Enter never picks e.g. Delete by accident
+  const draw = () => {
+    const q = filter.value.toLowerCase();
+    visible = [];
+    const nodes = [];
+    for (const g of groups) {
+      const items = g.items.filter((it) => !q || it.label.toLowerCase().includes(q));
+      if (!items.length) continue;
+      if (g.label) nodes.push(h('div', { class: 'menu-group' }, g.label));
+      else if (nodes.length) nodes.push(h('div', { class: 'menu-sep' }));
+      for (const it of items) {
+        const idx = visible.length;
+        visible.push(it);
+        nodes.push(h('div', {
+          class: 'menu-item' + (idx === active ? ' active' : '') + (it.danger ? ' danger' : ''),
+          onmousedown: (e) => { e.preventDefault(); pick(it); },
+          onmouseenter: () => { active = idx; },
+        },
+          hasChecks && h('span', { class: 'check' }, it.checked ? '✓' : ''),
+          it.icon && icon(it.icon),
+          h('span', { class: 'ellipsis' }, it.label),
+          it.meta && h('span', { class: 'meta' }, it.meta)));
+      }
+    }
+    list.replaceChildren(...(nodes.length ? nodes : [h('div', { class: 'menu-empty' }, t('nothingToAdd'))]));
+  };
+  const pick = (it) => { closeMenu(); onPick(it); };
+  filter.addEventListener('input', () => { active = 0; draw(); });
+  filter.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeMenu();
+    else if (e.key === 'ArrowDown') { active = Math.min(active + 1, visible.length - 1); draw(); e.preventDefault(); }
+    else if (e.key === 'ArrowUp') { active = Math.max(active - 1, 0); draw(); e.preventDefault(); }
+    else if (e.key === 'Enter' && visible[active]) pick(visible[active]);
+  });
+  const onDown = (e) => { if (!menu.contains(e.target)) closeMenu(); };
+  closeMenu = () => {
+    menu.remove();
+    document.removeEventListener('mousedown', onDown, true);
+    closeMenu = () => {};
+  };
+  draw();
+  document.body.append(menu);
+  // Place under the anchor, or above it when there isn't room below.
+  const r = anchor.getBoundingClientRect();
+  const below = window.innerHeight - r.bottom - 12, above = r.top - 12;
+  const room = Math.max(below, above);
+  menu.style.minWidth = `${Math.max(180, Math.min(r.width, 240))}px`;
+  if (align === 'right') menu.style.minWidth = '200px';
+  const left = align === 'right' ? r.right - menu.offsetWidth : r.left;
+  menu.style.left = `${Math.max(8, Math.min(left, window.innerWidth - menu.offsetWidth - 8))}px`;
+  menu.style.maxHeight = `${Math.min(room, 360)}px`;
+  if (below >= 200 || below >= above) menu.style.top = `${r.bottom + 4}px`;
+  else menu.style.bottom = `${window.innerHeight - r.top + 4}px`;
+  document.addEventListener('mousedown', onDown, true);
+  setTimeout(() => filter.focus(), 0);
+}
+
+// Don't wipe out an input the user is typing in when a background update arrives.
+let deferredRender = false;
+document.addEventListener('focusout', () => {
+  setTimeout(() => {
+    if (deferredRender && !isEditing()) { deferredRender = false; render(); }
+  }, 0);
+});
+function isEditing() {
+  const a = document.activeElement;
+  return a && document.getElementById('main').contains(a) && a.tagName === 'INPUT' && a.type === 'text';
+}
+
+// ---------------------------------------------------------------------------
+// Render
+// ---------------------------------------------------------------------------
+function render() {
+  if (isEditing() || ui.dragging) { deferredRender = true; return; }
+  document.querySelectorAll('nav .tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === ui.tab));
+  const main = document.getElementById('main');
+  const scroll = main.scrollTop;
+  const prevWrap = main.querySelector('.grid-wrap');
+  const scrollX = prevWrap ? prevWrap.scrollLeft : 0;
+  // Ask the main thread to read the open preset's component (one node per poll, not all of them).
+  const want = ui.tab === 'presets' && ui.presetId ? ui.presetId : null;
+  if (want !== watched) {
+    watched = want;
+    compDetail = null;
+    send('watchPreset', { id: want });
+  }
+  main.replaceChildren(
+    ui.tab === 'configs' ? (ui.configId ? configDetail() : ui.configReport ? configReportView() : configList())
+    : (ui.presetId ? presetDetail() : ui.report ? reportView() : presetList())
+  );
+  main.scrollTop = scroll;
+  const wrap = main.querySelector('.grid-wrap');
+  if (wrap) wrap.scrollLeft = scrollX;
+}
+
+function go(patch) {
+  closeMenu();
+  if (patch.tab && patch.tab !== ui.tab) { ui.editing = false; ui.selected = new Set(); }
+  Object.assign(ui, { creating: false }, patch);
+  render();
+  document.getElementById('main').scrollTop = 0;
+}
+
+/** Open the config or preset whose table was selected on the canvas. */
+function reveal(collectionId) {
+  const cfg = configById(collectionId), col = collectionById(collectionId);
+  if (cfg) {
+    if (ui.tab === 'configs' && ui.configId === cfg.id) return;
+    if (ui.configId && ui.configId !== cfg.id) leaveConfig({ tab: 'configs', configId: cfg.id });
+    else go({ tab: 'configs', configId: cfg.id });
+  } else if (col && col.isPreset) {
+    if (ui.tab === 'presets' && ui.presetId === col.id) return;
+    go({ tab: 'presets', presetId: col.id });
+  }
+}
+
+/** Back from a config: undo what the plugin applied there, unless the page was changed by hand since. */
+function leaveConfig(patch = {}) {
+  const id = ui.configId;
+  if (id && (applied.configs[id] || {}).viaPlugin) act('resetConfig', { configId: id, onlyIfUnchanged: true });
+  go({ configId: null, ...patch });
+}
+
+document.querySelectorAll('nav .tab').forEach((b) => {
+  b.onclick = () => go({ tab: b.dataset.tab });
+  // Double-click = back to that tab's list.
+  b.ondblclick = () => (b.dataset.tab === 'configs' ? leaveConfig({ tab: 'configs', configReport: false, fromConfigReport: false }) : go({ tab: 'presets', presetId: null, report: null, fromReport: false }));
+});
+
+// ---------------------------------------------------------------------------
+// Shared bits
+// ---------------------------------------------------------------------------
+const collectionById = (id) => state.presets.find((p) => p.id === id);
+const configById = (id) => state.configs.find((c) => c.id === id);
+const presets = () => state.presets.filter((p) => p.isPreset);
+
+function rowProblem(row, modeId) {
+  if (!row.validType) return t('notString');
+  const col = collectionById(row.presetId);
+  if (!col) return t('noCollectionNamed', row.name);
+  const v = row.values[modeId];
+  if (!col.modes.some((m) => m.name === v)) return v ? t('notAModeOf', v, col.name) : t('noModeChosen');
+  return null;
+}
+function configProblems(cfg) {
+  let n = 0;
+  for (const r of cfg.rows) for (const m of cfg.modes) if (rowProblem(r, m.id)) n++;
+  return n;
+}
+
+function newCollectionForm({ title, namePlaceholder, prefix, onSubmit, onCancel }) {
+  const name = h('input', { type: 'text', placeholder: namePlaceholder, class: 'grow' });
+  const modes = h('input', { type: 'text', placeholder: t('modesPlaceholder'), value: 'Default' });
+  const submit = async () => {
+    if (!name.value.trim()) return name.focus();
+    const res = await onSubmit({ name: name.value, modes: modes.value.split(',').map((s) => s.trim()).filter(Boolean) });
+    if (res && res.ok === false) name.focus();
+  };
+  [name, modes].forEach((i) => i.addEventListener('keydown', (e) => e.key === 'Enter' && submit()));
+  setTimeout(() => name.focus(), 0);
+  return h('div', { class: 'card stack' },
+    h('h2', {}, title),
+    h('label', { class: 'field' }, t('name'), h('div', { class: 'row' }, h('span', { class: 'faint' }, prefix), name)),
+    h('label', { class: 'field' }, t('modesLabel'), modes),
+    h('div', { class: 'row', style: 'justify-content:flex-end' }, btn(t('cancel'), onCancel, 'ghost'), btn(t('create'), submit, 'primary')),
+  );
+}
+
+/** Shown while a table template component is missing: tables stop updating until the templates are rebuilt. */
+function templatesNotice() {
+  return state.templatesMissing && h('div', { class: 'notice warn' }, icon('table'), h('span', {}, t('templatesMissing')),
+    btn(t('restoreTemplates'), () => act('restoreTemplates'), 'sm'));
+}
+
+function detailHead({ onBack, name, onRename, item, onDelete }) {
+  const more = (e) => openMenu(e.currentTarget, [
+    { items: item.tableId ? [
+      { id: 'redraw', label: t('redrawTable') },
+      { id: 'remove', label: t('removeTable') },
+    ] : [] },
+    { items: [{ id: 'delete', label: t('deleteNamed', name), danger: true }] },
+  ], async (it) => {
+    if (it.id === 'redraw') act('table', { id: item.id });
+    if (it.id === 'remove' && (await confirmAction(t('confirmRemoveTable', name), t('remove')))) {
+      act('removeTable', { id: item.id });
+    }
+    if (it.id === 'delete') onDelete();
+  }, { search: false, align: 'right' });
+
+  return h('div', { class: 'stack' }, templatesNotice(), h('div', { class: 'detail-head' },
+    btn(icon('back'), onBack, 'ghost icon', { title: t('back') }),
+    commitInput(name, onRename, { class: 'bare grow title-input', title: t('rename') }),
+    item.tableId && selectedTableOf === item.id
+      ? btn([icon('table'), t('tableSelected')], null, 'selected', { disabled: true, title: t('tableSelectedTitle') })
+      : item.tableId
+      ? btn([icon('table'), t('viewTable')], () => act('locateTable', { id: item.id }), '', { title: t('viewTableTitle') })
+      : btn([icon('table'), t('addTable')], () => act('table', { id: item.id }), '', { title: t('addTableTitle') }),
+    btn(icon('more'), more, 'ghost icon', { title: t('more') }),
+  ));
+}
+
+/**
+ * Like Figma's variables table: the name and mode columns have their own (resizable) widths, an empty
+ * filler column takes the leftover space — hinting that more modes fit — and the "+" column sits at the end.
+ */
+function gridTable(cid, modes, thead, tbody) {
+  const widths = [widthOf(cid, 'label'), ...modes.map((m) => widthOf(cid, m.id))];
+  return h('div', { class: 'grid-wrap' },
+    h('table', { class: 'grid', style: `min-width:${widths.reduce((a, b) => a + b, 0) + 40}px` },
+      h('colgroup', {},
+        h('col', { 'data-col': 'label', style: `width:${widths[0]}px` }),
+        modes.map((m, i) => h('col', { 'data-col': m.id, style: `width:${widths[i + 1]}px` })),
+        h('col', {}),
+        h('col', { class: 'c-add' })),
+      thead, tbody));
+}
+
+/** Drag handle on a header cell's right edge. */
+function resizer(cid, colId) {
+  const min = colId === 'label' ? MIN_W.label : MIN_W.mode;
+  return h('div', {
+    class: 'col-resizer',
+    title: t('dragResize'),
+    onpointerdown: (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const handle = e.currentTarget;
+      const table = handle.closest('table');
+      const col = table.querySelector(`col[data-col="${CSS.escape(colId)}"]`);
+      const startX = e.clientX, startW = col.getBoundingClientRect().width || widthOf(cid, colId);
+      const fixedTotal = () => [...table.querySelectorAll('col[data-col]')].reduce((a, c) => a + parseFloat(c.style.width || 0), 0);
+      let w = startW;
+      ui.dragging = true;
+      handle.classList.add('active');
+      document.body.classList.add('resizing');
+      handle.setPointerCapture(e.pointerId);
+      const move = (ev) => {
+        w = Math.max(min, Math.round(startW + ev.clientX - startX));
+        col.style.width = `${w}px`;
+        table.style.minWidth = `${fixedTotal() + 40}px`;
+      };
+      const up = () => {
+        handle.removeEventListener('pointermove', move);
+        handle.removeEventListener('pointerup', up);
+        handle.classList.remove('active');
+        document.body.classList.remove('resizing');
+        ui.dragging = false;
+        saveWidth(cid, colId, w);
+        if (deferredRender) { deferredRender = false; render(); }
+      };
+      handle.addEventListener('pointermove', move);
+      handle.addEventListener('pointerup', up);
+    },
+    ondblclick: (e) => {
+      // Double-click resets to the default width.
+      e.stopPropagation();
+      delete colWidths[`${cid}:${colId}`];
+      saveWidth(cid, colId, colId === 'label' ? LABEL_W : MODE_W);
+      render();
+    },
+  });
+}
+
+function labelHeader(cid, text) {
+  return h('th', {}, text, resizer(cid, 'label'));
+}
+
+function modeHeader(collectionId, mode, canRemove, live = false) {
+  return h('th', { class: live ? 'live' : '' }, resizer(collectionId, mode.id),
+    h('div', { class: 'colhead' },
+      commitInput(mode.name, (name) => act('renameMode', { collectionId, modeId: mode.id, name }), { class: 'bare', title: t('renameMode', mode.name) }),
+      live && h('span', { class: 'live-tag', title: t('onPageTitle') }, t('onPage')),
+      canRemove && btn('×', async () => (await confirmAction(t('confirmRemoveMode', mode.name), t('remove'))) && act('removeMode', { collectionId, modeId: mode.id }), 'ghost sm icon hover-only', { title: t('removeMode') }),
+    ),
+  );
+}
+
+/** Presets (`autoName`): add "mode N" at once and put its name up for editing, like Figma. Configs ask for a name. */
+function addModeHeader(collectionId, autoName = false) {
+  return [h('th', { class: 'filler' }), h('th', { class: 'add' }, btn(icon('plus'), async () => {
+    if (autoName) {
+      const res = await act('addMode', { collectionId });
+      const inputs = res.ok ? document.querySelectorAll('table.grid thead .colhead input') : [];
+      const last = inputs[inputs.length - 1];
+      if (last) { last.focus(); last.select(); }
+      return;
+    }
+    const name = await promptText(t('newModeName'));
+    if (name) act('addMode', { collectionId, name });
+  }, 'ghost icon', { title: t('addMode') }))];
+}
+
+/** Trailing cells under the filler and "+" columns. */
+const fillerCell = (tag = 'td') => [h(tag, { class: 'filler' }), h(tag, { class: 'add' })];
+
+/** The "+ Create variable"-style last row. */
+function createRow(colspan, label, onclick, opts = {}) {
+  return h('tr', { class: 'create-row' },
+    h('td', { colspan },
+      h('button', { class: 'create-btn', onclick, disabled: opts.disabled, title: opts.title }, icon('plus'), label)));
+}
+
+/**
+ * Edit mode for the config / preset lists: tick several items and delete them at once
+ * (instead of opening each one → ⋯ → delete).
+ */
+function editTools(items, kind) {
+  if (!ui.editing) return btn(t('edit'), () => go({ editing: true, selected: new Set() }), '', { disabled: !items.length });
+  const ids = items.map((it) => it.id).filter((id) => ui.selected.has(id));
+  const all = ids.length === items.length && items.length > 0;
+  return [
+    btn(all ? t('selectNone') : t('selectAll'), () => go({ selected: new Set(all ? [] : items.map((it) => it.id)) }), 'ghost'),
+    btn(t('deleteSelected', ids.length), async () => {
+      if (!(await confirmAction(t(kind === 'configs' ? 'confirmDeleteConfigs' : 'confirmDeletePresets', ids.length)))) return;
+      const res = await act(kind === 'configs' ? 'deleteConfigs' : 'deletePresets', { ids });
+      if (res.ok) go({ editing: false, selected: new Set() });
+    }, 'danger', { disabled: !ids.length }),
+    btn(t('done'), () => go({ editing: false, selected: new Set() }), 'primary'),
+  ];
+}
+
+/** A list row: opens the item, or (edit mode) toggles its checkbox. */
+function listItem(id, open, ...children) {
+  const picked = ui.selected.has(id);
+  const toggle = () => {
+    picked ? ui.selected.delete(id) : ui.selected.add(id);
+    render();
+  };
+  return h('div', { class: 'item' + (ui.editing && picked ? ' picked' : ''), onclick: ui.editing ? toggle : open },
+    ui.editing && h('input', { type: 'checkbox', checked: picked, onclick: (e) => e.stopPropagation(), onchange: toggle }),
+    children,
+    !ui.editing && h('span', { class: 'faint' }, '›'));
+}
+
+/** What's wrong with a preset, from the variable table and the last component check (cleanup / opened preset). */
+function presetFlag(p) {
+  if (!p || !p.isPreset) return null;
+  if (!p.component) return t('noComponent');
+  if (p.componentMissing) return t('componentMissing');
+  if (p.issueCount) return t('nIssues', p.issueCount);
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Configs
+// ---------------------------------------------------------------------------
+/** Search box that keeps focus and caret while the list under it re-renders. */
+function searchBox(value, placeholder, onInput, view) {
+  const input = h('input', { type: 'text', placeholder, value, class: 'grow' });
+  input.addEventListener('input', () => {
+    onInput(input.value);
+    const pos = input.selectionStart;
+    const next = view();
+    document.getElementById('main').replaceChildren(next);
+    const again = next.querySelector('.toolbar input');
+    again.focus();
+    again.setSelectionRange(pos, pos);
+  });
+  return input;
+}
+
+/**
+ * Everything to clean up in a config. Unlike presets this needs only the variable table (no canvas nodes),
+ * so it covers every config and stays live. Preset problems are as of the last preset check.
+ */
+function configIssues(cfg) {
+  const out = [];
+  if (!cfg.rows.length) out.push(t('ciEmpty'));
+  for (const r of cfg.rows) {
+    const col = collectionById(r.presetId);
+    if (!r.validType) { out.push(t('ciType', r.name)); continue; }
+    if (!col) { out.push(t('ciGone', r.name)); continue; }
+    const bad = cfg.modes.filter((m) => rowProblem(r, m.id)).length;
+    if (bad) out.push(t('ciInvalid', col.name, bad));
+    const flag = presetFlag(col);
+    if (flag) out.push(`${col.name}: ${flag}`);
+  }
+  return out;
+}
+
+function configList() {
+  const q = ui.configSearch.toLowerCase();
+  const list = state.configs.filter((c) => !q || c.name.toLowerCase().includes(q)
+    || c.rows.some((r) => (collectionById(r.presetId) || r).name.toLowerCase().includes(q)));
+  return h('div', { class: 'stack' },
+    !ui.creating && h('div', { class: 'toolbar' },
+      searchBox(ui.configSearch, t('searchConfigs'), (v) => (ui.configSearch = v), configList),
+      state.configs.length > 0 && editTools(list, 'configs'),
+      !ui.editing && state.configs.length > 0 && btn([t('configCleanup'), h('span', { class: 'scope' }, t('scopeFile'))], () => go({ configReport: true }), '', { title: t('configCleanupTitle') }),
+      !ui.editing && btn(t('newConfigBtn'), () => go({ creating: true }), 'primary'),
+    ),
+    ui.creating && newCollectionForm({
+      title: t('newConfig'),
+      namePlaceholder: t('configPlaceholder'),
+      prefix: 'config-',
+      onCancel: () => go({ creating: false }),
+      onSubmit: async ({ name, modes }) => {
+        const res = await act('createConfig', { name, modes });
+        if (res.ok) go({ configId: res.data.id });
+        return res;
+      },
+    }),
+    state.configs.length === 0 && !ui.creating
+      ? h('div', { class: 'empty' },
+          h('p', {}, t('noConfigs')),
+          h('p', { class: 'small' }, t('noConfigsBody')))
+      : list.length === 0
+        ? h('div', { class: 'empty' }, t('nothingMatches', ui.configSearch))
+        : h('div', { class: 'list' }, list.map((c) => {
+          const problems = configProblems(c);
+          // Presets in this config that need cleanup (no / deleted component, or token conflicts)
+          const flagged = c.rows.map((r) => collectionById(r.presetId)).filter((p) => presetFlag(p));
+          return listItem(c.id, () => go({ configId: c.id }),
+            h('div', { class: 'grow' },
+              h('div', { class: 'name ellipsis' }, c.name),
+              h('div', { class: 'muted small ellipsis' }, [t('nPresets', c.rows.length), c.modes.map((m) => m.name).join(', '), c.tableId && t('tableOnCanvas')].filter(Boolean).join(' · '))),
+            flagged.length > 0 && h('span', { class: 'badge warn', title: flagged.map((p) => `${p.name}: ${presetFlag(p)}`).join('\n') }, t('presetProblems', flagged.length)),
+            problems > 0 && h('span', { class: 'badge warn' }, t('nInvalid', problems)));
+        })),
+  );
+}
+
+/** Config cleanup report — live, computed from the variable table; opening a config keeps a way back. */
+function configReportView() {
+  const entries = state.configs.map((c) => ({ c, issues: configIssues(c) })).filter((e) => e.issues.length);
+  return h('div', { class: 'stack' },
+    h('div', { class: 'detail-head' },
+      btn(icon('back'), () => go({ configReport: false }), 'ghost icon', { title: t('back') }),
+      h('div', { class: 'grow title-text ellipsis' }, t('configReportTitle'))),
+    h('div', { class: 'muted small' }, t('configReportSummary', state.configs.length)),
+    entries.length === 0 && h('div', { class: 'notice info' }, h('span', {}, t('configReportClean'))),
+    entries.length > 0 && h('div', { class: 'list' }, entries.map(({ c, issues }) =>
+      h('div', { class: 'item', onclick: () => go({ configId: c.id, configReport: false, fromConfigReport: true }) },
+        h('div', { class: 'grow' },
+          h('div', { class: 'name ellipsis' }, c.name),
+          h('div', { class: 'muted small ellipsis', title: issues.join('\n') }, issues.join(' · '))),
+        h('span', { class: 'badge warn' }, t('nIssues', issues.length)),
+        h('span', { class: 'faint' }, '›')))),
+    h('div', { class: 'muted small' }, t('configReportNote')),
+  );
+}
+
+function configDetail() {
+  const cfg = configById(ui.configId);
+  if (!cfg) { ui.configId = null; return configList(); }
+  const status = applied.configs[cfg.id] || { modeId: null, partial: false };
+  const used = new Set(cfg.rows.map((r) => r.presetId).filter(Boolean));
+  // Collections without variables have nothing to switch, so they aren't offered.
+  const available = state.presets.filter((p) => !used.has(p.id) && p.tokens.length > 0);
+  const toItem = (p) => ({ id: p.id, label: p.name, meta: t('nModes', p.modes.length) });
+  const addMenu = (e) => openMenu(e.currentTarget, [
+    { label: t('presets'), items: available.filter((p) => p.isPreset).map(toItem) },
+    { label: t('otherCollections'), items: available.filter((p) => !p.isPreset).map(toItem) },
+  ], (it) => act('addPresetToConfig', { configId: cfg.id, presetId: it.id }));
+
+  const pageBar = h('div', { class: 'page-bar' },
+    h('span', { class: 'lead' }, icon('page'), t('previewBefore'), h('b', { title: applied.pageName }, `“${applied.pageName || ''}”`), t('previewAfter')),
+    h('div', { class: 'seg', role: 'radiogroup' },
+      btn(t('none'), () => act('resetConfig', { configId: cfg.id }), 'none' + (!status.modeId && !status.partial ? ' on' : ''), {
+        role: 'radio',
+        disabled: !status.modeId && !status.partial,
+        title: status.viaPlugin ? t('noneRestoreTitle') : t('noneRemoveTitle'),
+      }),
+      cfg.modes.map((m) => btn(m.name, () => status.modeId !== m.id && act('applyConfigMode', { configId: cfg.id, modeId: m.id }),
+        status.modeId === m.id ? 'on' : '', { role: 'radio', disabled: cfg.rows.length === 0 }))),
+    status.partial && h('span', { class: 'badge warn', title: t('customTitle') }, t('custom')),
+  );
+
+  return h('div', { class: 'stack' },
+    ui.fromConfigReport && h('div', { class: 'notice info' }, h('span', {}, t('fromConfigReportNote')),
+      btn(t('backToReport'), () => leaveConfig({ configReport: true, fromConfigReport: false }), 'sm')),
+    detailHead({
+      onBack: () => (ui.fromConfigReport ? leaveConfig({ configReport: true, fromConfigReport: false }) : leaveConfig()),
+      name: cfg.name,
+      onRename: (name) => act('renameConfig', { id: cfg.id, name }),
+      item: cfg,
+      onDelete: async () => (await confirmAction(t('confirmDeleteConfig', cfg.name))) &&
+        act('deleteConfig', { id: cfg.id }).then((r) => r.ok && go({ configId: null })),
+    }),
+    pageBar,
+    gridTable(cfg.id, cfg.modes,
+      h('thead', {},
+        h('tr', {},
+          labelHeader(cfg.id, t('preset')),
+          cfg.modes.map((m) => modeHeader(cfg.id, m, cfg.modes.length > 1, m.id === status.modeId)),
+          addModeHeader(cfg.id),
+        ),
+      ),
+      h('tbody', {},
+        cfg.rows.map((r) => {
+          const col = collectionById(r.presetId);
+          return h('tr', {},
+            h('td', {},
+              h('div', { class: 'name-cell' },
+                icon('collection'),
+                h('span', { class: 'text' + (col ? '' : ' missing'), title: col ? col.name : r.name }, col ? col.name : r.name),
+                presetFlag(col) && h('span', { class: 'flag', title: presetFlag(col) }, '⚠'),
+                col && col.isPreset && btn('↗', () => go({ tab: 'presets', presetId: col.id }), 'ghost sm icon hover-only', { title: t('openPreset') }),
+                btn('×', () => act('removeConfigRow', { id: r.variableId }), 'ghost sm icon hover-only', { title: t('removeFromConfig') }))),
+            cfg.modes.map((m) => {
+              const problem = rowProblem(r, m.id);
+              const value = r.values[m.id];
+              const live = m.id === status.modeId ? ' live' : '';
+              if (!col || !r.validType) return h('td', { class: 'cell' + live, title: problem }, h('span', { class: 'problem ellipsis' }, `⚠ ${problem}`));
+              const pickMode = (e) => openMenu(e.currentTarget,
+                [{ items: col.modes.map((pm) => ({ id: pm.name, label: pm.name, checked: pm.name === value })) }],
+                (it) => it.id !== value && act('setConfigValue', { id: r.variableId, modeId: m.id, value: it.id }),
+                { search: col.modes.length > 8 });
+              return h('td', { class: 'cell' + live, title: problem || '' },
+                h('button', { class: 'value-btn' + (problem ? ' invalid' : ''), onclick: pickMode },
+                  h('span', { class: 'ellipsis' }, problem ? `⚠ ${value || t('unset')}` : value),
+                  h('span', { class: 'chev' }, icon('chevron'))));
+            }),
+            fillerCell());
+        }),
+        createRow(cfg.modes.length + 3, t('addPreset'), addMenu, {
+          disabled: available.length === 0,
+          title: available.length ? '' : t('noOtherCollections'),
+        }),
+      ),
+    ),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Presets
+// ---------------------------------------------------------------------------
+/** Presets without a working component — the ones "Link existing preset" can attach to a component. */
+const linkablePresets = () => {
+  // A deleted component is only known once read: from the open preset, or the last cleanup report.
+  const missing = new Set((ui.report ? ui.report.missing : []).map((e) => e.presetId));
+  if (compDetail && compDetail.status === 'missing') missing.add(compDetail.presetId);
+  return presets().filter((p) => !p.component || missing.has(p.id));
+};
+
+/** What the canvas selection offers: open its preset, create one, or link an existing one. */
+function selectionCard() {
+  const sc = selComp;
+  if (!sc) return h('div', { class: 'notice info' }, icon('component'), h('span', {}, t('selectHint')));
+  if (sc.library) return h('div', { class: 'notice warn' }, icon('component'), h('span', {}, t('libraryComp', sc.name)));
+  const linkable = linkablePresets();
+  const linkMenu = (e) => openMenu(e.currentTarget,
+    [{ items: linkable.map((p) => ({ id: p.id, label: p.name, meta: p.component ? t('componentMissing') : t('nTokens', p.tokens.length) })) }],
+    async (it) => {
+      const res = await act('linkPreset', { presetId: it.id, componentId: sc.id });
+      if (res.ok) go({ presetId: it.id });
+    });
+  return h('div', { class: 'sel-card' },
+    h('div', { class: 'who', title: sc.fromInstance ? t('fromInstance') : '' },
+      icon('component'), h('b', { class: 'ellipsis' }, sc.name),
+      sc.fromInstance && h('span', { class: 'muted small ellipsis' }, t('fromInstance'))),
+    sc.presetId
+      ? h('div', { class: 'acts' }, btn(t('openNamed', (collectionById(sc.presetId) || {}).name || sc.presetName), () => go({ presetId: sc.presetId }), 'primary'))
+      : h('div', { class: 'acts' },
+          btn(t('linkExisting'), linkMenu, '', { disabled: linkable.length === 0, title: linkable.length ? t('linkExistingTitle') : t('noLinkable') }),
+          btn(t('createPresetFor', sc.presetName), async () => {
+            const res = await act('createPresetForComponent', { componentId: sc.id });
+            if (res.ok) go({ presetId: res.data.id });
+          }, 'primary'),
+        ),
+  );
+}
+
+function presetList() {
+  const all = presets();
+  const q = ui.search.toLowerCase();
+  const list = all.filter((p) => !q || p.name.toLowerCase().includes(q) || p.tokens.some((tk) => tk.name.toLowerCase().includes(q)));
+  const search = searchBox(ui.search, t('searchPresets'), (v) => (ui.search = v), presetList);
+  // Only what the variable table knows — components are checked by the cleanup, not on every poll.
+  const badge = (p) => {
+    const f = presetFlag(p);
+    return f && h('span', { class: 'badge ' + (p.componentMissing ? 'danger' : 'warn'), title: p.component && !p.componentMissing ? t('lastCheckTitle') : '' }, f);
+  };
+  return h('div', { class: 'stack' },
+    selectionCard(),
+    all.length > 0 && h('div', { class: 'toolbar' }, search,
+      editTools(list, 'presets'),
+      !ui.editing && btn([t('cleanup'), h('span', { class: 'scope' }, t('scopePage'))], runCleanup, '', { title: t('cleanupTitle'), disabled: ui.cleaning })),
+    all.length === 0
+      ? h('div', { class: 'empty' },
+          h('p', {}, t('noPresets')),
+          h('p', { class: 'small' }, t('noPresetsBody')))
+      : list.length === 0
+        ? h('div', { class: 'empty' }, t('nothingMatches', ui.search))
+        : h('div', { class: 'list' }, list.map((p) =>
+            listItem(p.id, () => go({ presetId: p.id }),
+              h('div', { class: 'grow' },
+                h('div', { class: 'name ellipsis' }, p.name),
+                h('div', { class: 'muted small ellipsis' }, [
+                  p.component && p.component.name,
+                  t('nTokens', p.tokens.length), p.modes.map((m) => m.name).join(', '), p.tableId && t('tableOnCanvas'),
+                ].filter(Boolean).join(' · '))),
+              badge(p)))),
+  );
+}
+
+const typeLabel = (type) => t('type')[type];
+
+function toHex(c) {
+  const x = (n) => Math.round(n * 255).toString(16).padStart(2, '0');
+  return `#${x(c.r)}${x(c.g)}${x(c.b)}`;
+}
+function fromHex(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return { r: ((n >> 16) & 255) / 255, g: ((n >> 8) & 255) / 255, b: (n & 255) / 255, a: 1 };
+}
+
+function valueEditor(token, modeId) {
+  const cell = token.values[modeId];
+  if (!cell) return h('span', { class: 'faint' }, '—');
+  if (cell.kind === 'alias') return h('span', { class: 'alias ellipsis', title: t('aliasTitle') }, `→ ${cell.name}`);
+  const set = (value) => act('setTokenValue', { id: token.id, modeId, value });
+  switch (token.type) {
+    case 'BOOLEAN':
+      return h('label', { class: 'bool' },
+        h('input', { type: 'checkbox', role: 'switch', class: 'switch', checked: cell.value === true, onchange: (e) => set(e.target.checked) }),
+        cell.value ? t('true') : t('false'));
+    case 'FLOAT':
+      return commitInput(String(cell.value), (v) => set(Number(v)), { class: 'bare', inputmode: 'decimal' });
+    case 'COLOR': {
+      const c = cell.value;
+      return h('label', { class: 'color-val' },
+        h('input', { type: 'color', value: toHex(c), onchange: (e) => set({ ...fromHex(e.target.value), a: c.a }) }),
+        toHex(c).slice(1).toUpperCase(),
+        c.a < 1 && h('span', { class: 'muted' }, `${Math.round(c.a * 100)}%`));
+    }
+    default:
+      return commitInput(String(cell.value), (v) => set(v), { class: 'bare', placeholder: t('empty') });
+  }
+}
+
+/** Run the preset cleanup (current page + variable table) and show its report. */
+async function runCleanup() {
+  ui.cleaning = true;
+  render();
+  const res = await act('cleanupPresets');
+  ui.cleaning = false;
+  go({ presetId: null, fromReport: false, report: res.ok ? res.data : ui.report });
+}
+
+/** Like i18n's cleanup report: findings grouped by kind; clicking a preset opens it with a way back. */
+function reportView() {
+  const r = ui.report;
+  const open = (e) => go({ presetId: e.presetId, fromReport: true });
+  const item = (e, sub, onclick, extra) => h('div', { class: 'item', onclick },
+    h('div', { class: 'grow' },
+      h('div', { class: 'name ellipsis' }, e.presetName),
+      sub && h('div', { class: 'muted small ellipsis' }, sub)),
+    extra,
+    h('span', { class: 'faint' }, '›'));
+  const section = (title, entries, one) => entries.length > 0 && h('div', { class: 'stack' },
+    h('div', { class: 'sec-title' }, `${title} · ${entries.length}`),
+    h('div', { class: 'list' }, entries.map(one)));
+  const total = r.unlinked.length + r.missing.length + r.issues.length;
+  return h('div', { class: 'stack' },
+    h('div', { class: 'detail-head' },
+      btn(icon('back'), () => go({ report: null }), 'ghost icon', { title: t('back') }),
+      h('div', { class: 'grow title-text ellipsis' }, t('reportTitle', r.pageName)),
+      btn(t('rerun'), runCleanup, '', { disabled: ui.cleaning })),
+    h('div', { class: 'muted small' }, t('reportSummary', r.checked, r.bound)),
+    total === 0 && h('div', { class: 'notice info' }, h('span', {}, t('reportClean'))),
+    section(t('secIssues'), r.issues, (e) => item(e, e.issues.map(issueText).join(' · '), () => open(e),
+      h('span', { class: 'badge warn' }, t('nIssues', e.issues.length)))),
+    section(t('secMissing'), r.missing, (e) => item(e, t('componentMissing') + (e.componentName ? ` · ${e.componentName}` : ''), () => open(e))),
+    section(t('secUnlinked'), r.unlinked, (e) => item(e, t('noComponent'), () => open(e))),
+    section(t('secElsewhere'), r.elsewhere, (e) => item(e, `${e.componentName} · ${t('onPageNamed', e.pageName || '?')}`,
+      () => act('locateComponent', { id: e.presetId }))),
+    r.elsewhere.length > 0 && h('div', { class: 'muted small' }, t('elsewhereHint')),
+  );
+}
+
+/** Editor for a property value — the control follows the property type (Boolean switch, text, variant option). */
+function propEditor(pr, cell, onSet) {
+  if (cell && cell.kind === 'alias') return h('span', { class: 'alias ellipsis', title: t('aliasTitle') }, `→ ${cell.name}`);
+  const value = cell ? cell.value : pr.defaultValue;
+  switch (pr.kind) {
+    case 'BOOLEAN':
+      return h('label', { class: 'bool' },
+        h('input', { type: 'checkbox', role: 'switch', class: 'switch', checked: value === true, onchange: (e) => onSet(e.target.checked) }),
+        value === true ? t('true') : t('false'));
+    case 'VARIANT': {
+      const options = pr.options || [];
+      const invalid = !options.includes(value);
+      const pick = (e) => openMenu(e.currentTarget,
+        [{ items: options.map((o) => ({ id: o, label: o, checked: o === value })) }],
+        (it) => it.id !== value && onSet(it.id),
+        { search: options.length > 8 });
+      return h('button', { class: 'value-btn' + (invalid ? ' invalid' : ''), onclick: pick },
+        h('span', { class: 'ellipsis' }, invalid ? `⚠ ${value || t('unset')}` : value),
+        h('span', { class: 'chev' }, icon('chevron')));
+    }
+    default:
+      return commitInput(String(value ?? ''), (v) => onSet(v), { class: 'bare', placeholder: t('empty') });
+  }
+}
+
+/** Text for a PresetIssue from the main thread (componentDetail in code.ts). */
+function issueText(issue) {
+  const n = issue.tokenName;
+  switch (issue.kind) {
+    case 'unbound': return t('issueUnbound', n);
+    case 'other': return t('issueOther', n, issue.otherName);
+    case 'renamed': return t('issueRenamed', n, issue.propName);
+    case 'orphan': return t('issueOrphan', n);
+    case 'invalid': return t('issueInvalid', n, issue.value);
+  }
+  return '';
+}
+
+/** A cleanup line with its fix. Nothing is fixed automatically — the user decides. */
+function issueNotice(issue) {
+  const id = issue.tokenId;
+  const action =
+    issue.kind === 'unbound' || issue.kind === 'other' ? btn(t('rebind'), () => act('rebindToken', { id }), 'sm')
+    : issue.kind === 'renamed' ? btn(t('renameToProp'), () => act('renameTokenToProp', { id }), 'sm')
+    : issue.kind === 'orphan' ? btn(t('deleteToken'), async () => (await confirmAction(t('confirmDeleteToken', issue.tokenName))) && act('deleteToken', { id }), 'sm danger')
+    : null;
+  return h('div', { class: 'notice warn' }, h('span', {}, issueText(issue)), action);
+}
+
+/** Component line under the header: locate it, or (no / deleted component) link the selected one. */
+function componentBar(p, detail) {
+  const comp = p.component;
+  const canLink = selComp && !selComp.library && !selComp.presetId;
+  const linkBtn = btn(canLink ? t('linkSelected', selComp.name) : t('linkExisting'), async () => {
+    await act('linkPreset', { presetId: p.id, componentId: selComp.id });
+  }, 'sm', { disabled: !canLink, title: canLink ? t('linkExistingTitle') : t('selectHint') });
+  if (!comp) return h('div', { class: 'notice warn' }, icon('component'), h('span', {}, t('unlinkedNotice')), linkBtn);
+  if (detail && detail.status === 'missing') return h('div', { class: 'notice err' }, icon('component'), h('span', {}, t('missingNotice', comp.name)), linkBtn);
+  return h('div', { class: 'comp-row small' }, t('componentLabel'),
+    btn([icon('component'), h('span', { class: 'ellipsis' }, comp.name)], () => act('locateComponent', { id: p.id }), 'ghost', { title: t('locateTitle') }));
+}
+
+function presetDetail() {
+  const p = collectionById(ui.presetId);
+  if (!p || !p.isPreset) { ui.presetId = null; return presetList(); }
+  const inConfigs = state.configs.filter((c) => c.rows.some((r) => r.presetId === p.id));
+  // The component is read live by the main thread for the open preset only (see watchPreset).
+  const detail = compDetail && compDetail.presetId === p.id ? compDetail : null;
+  const loading = !!p.component && !detail;
+  const comp = detail && detail.status === 'ok' ? detail : null;
+  const issues = comp ? comp.issues : [];
+  const flagged = new Set(issues.map((i) => i.tokenId));
+  const tokenById = new Map(p.tokens.map((tk) => [tk.id, tk]));
+  const flag = (tk) => flagged.has(tk.id) && h('span', { class: 'flag', title: issues.filter((i) => i.tokenId === tk.id).map(issueText).join('\n') }, '⚠');
+  const deleteBtn = (tk, linked) => btn('×', async () => (await confirmAction(t(linked ? 'confirmDeletePropToken' : 'confirmDeleteToken', tk.name))) && act('deleteToken', { id: tk.id }),
+    'ghost sm icon hover-only', { title: t('deleteToken') });
+
+  // One row per property of the component. A property without a token is "not added": editing any
+  // of its values creates the token (that value in that mode, the component default elsewhere) and binds it.
+  const propRows = comp ? comp.props.map((pr) => {
+    const tk = pr.tokenId && tokenById.get(pr.tokenId);
+    if (tk) {
+      return h('tr', {},
+        h('td', {},
+          h('div', { class: 'name-cell', title: `${t('property')}: ${pr.name} · ${t('kind')[pr.kind]}` },
+            icon(pr.kind), h('span', { class: 'text' }, tk.name), flag(tk), deleteBtn(tk, true))),
+        p.modes.map((m) => h('td', { class: 'cell' },
+          propEditor(pr, tk.values[m.id], (value) => act('setTokenValue', { id: tk.id, modeId: m.id, value })))),
+        fillerCell());
+    }
+    const add = (modeId, value) => act('addPropToken', { presetId: p.id, ref: pr.ref, modeId, value });
+    return h('tr', { class: 'unadded' },
+      h('td', {},
+        h('div', { class: 'name-cell', title: pr.binding === 'other' ? t('otherBoundTitle', pr.otherName) : t('notAddedTitle') },
+          icon(pr.kind), h('span', { class: 'text' }, pr.name),
+          pr.binding === 'other' && h('span', { class: 'flag' }, '⚠'),
+          btn(t('add'), () => add(p.modes[0].id, pr.defaultValue), 'sm add-prop', { title: t('addWithDefaults') }))),
+      p.modes.map((m) => h('td', { class: 'cell' }, propEditor(pr, null, (value) => add(m.id, value)))),
+      fillerCell());
+  }) : [];
+
+  // Tokens that aren't bound to a property of the component (or every token, while there's no component).
+  const mapped = new Set(comp ? comp.props.map((pr) => pr.tokenId).filter(Boolean) : []);
+  const otherRows = loading ? [] : p.tokens.filter((tk) => !mapped.has(tk.id)).map((tk) => h('tr', {},
+    h('td', {},
+      h('div', { class: 'name-cell', title: typeLabel(tk.type) },
+        icon(tk.type), h('span', { class: 'text' }, tk.name), flag(tk), deleteBtn(tk, false))),
+    p.modes.map((m) => h('td', { class: 'cell' }, valueEditor(tk, m.id))),
+    fillerCell()));
+
+  return h('div', { class: 'stack' },
+    ui.fromReport && h('div', { class: 'notice info' }, h('span', {}, t('fromReportNote')),
+      btn(t('backToReport'), runCleanup, 'sm')),
+    detailHead({
+      onBack: () => (ui.fromReport ? runCleanup() : go({ presetId: null })),
+      name: p.name,
+      onRename: (name) => act('renamePreset', { id: p.id, name }),
+      item: p,
+      onDelete: async () => (await confirmAction(t('confirmDeletePreset', p.name, inConfigs.map((c) => c.name).join(', ')))) &&
+        act('deletePreset', { id: p.id }).then((r) => r.ok && go({ presetId: null })),
+    }),
+    componentBar(p, detail),
+    inConfigs.length > 0 && h('div', { class: 'row muted small' }, t('usedIn'),
+      inConfigs.map((c) => h('span', { class: 'badge link', onclick: () => go({ tab: 'configs', configId: c.id }) }, c.name))),
+    issues.length > 0 && h('div', { class: 'issues' }, issues.map(issueNotice)),
+    comp && comp.props.length === 0 && h('div', { class: 'notice info' }, h('span', {}, t('noProps'))),
+    loading && h('div', { class: 'row muted small' }, h('span', { class: 'spin' }), t('loadingComponent')),
+    gridTable(p.id, p.modes,
+      h('thead', {}, h('tr', {},
+        labelHeader(p.id, p.component ? t('properties') : t('tokenId')),
+        p.modes.map((m) => modeHeader(p.id, m, p.modes.length > 1)),
+        addModeHeader(p.id, true),
+      )),
+      h('tbody', {}, propRows, otherRows),
+    ),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Window resize handle (plugin windows can only be resized from the plugin side)
+// ---------------------------------------------------------------------------
+(() => {
+  const grip = document.getElementById('resize');
+  let start = null;
+  const size = (e) => ({ w: start.w + e.clientX - start.x, h: start.h + e.clientY - start.y });
+  grip.addEventListener('pointerdown', (e) => {
+    start = { x: e.clientX, y: e.clientY, w: window.innerWidth, h: window.innerHeight };
+    grip.setPointerCapture(e.pointerId);
+  });
+  grip.addEventListener('pointermove', (e) => {
+    if (start) parent.postMessage({ pluginMessage: { type: 'resize', ...size(e) } }, '*');
+  });
+  grip.addEventListener('pointerup', (e) => {
+    if (!start) return;
+    parent.postMessage({ pluginMessage: { type: 'resize', ...size(e), done: true } }, '*');
+    start = null;
+  });
+})();
+
+applyLang();
+render();
+parent.postMessage({ pluginMessage: { type: 'ready' } }, '*');
+</script>
+</body>
+</html>

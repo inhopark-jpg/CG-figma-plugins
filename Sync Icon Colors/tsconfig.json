@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "target": "es2017",
+    "lib": ["es2017"],
+    "module": "commonjs",
+    "strict": true,
+    "noImplicitAny": true,
+    "outDir": ".",
+    "rootDir": ".",
+    "typeRoots": ["./node_modules/@types", "./node_modules/@figma"],
+    "types": ["plugin-typings"]
+  },
+  "files": ["code.ts"]
+}

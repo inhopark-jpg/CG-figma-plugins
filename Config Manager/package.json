@@ -1,0 +1,16 @@
+{
+  "name": "config-manager",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Figma plugin to manage UI SSOT via config and preset variable collections",
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@figma/plugin-typings": "^1.100.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.0"
+  }
+}

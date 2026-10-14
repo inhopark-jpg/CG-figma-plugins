@@ -1,0 +1,11 @@
+{
+  "name": "Dev Inspector",
+  "id": "dev-inspector-local",
+  "api": "1.0.0",
+  "main": "code.js",
+  "ui": "ui.html",
+  "editorType": ["dev", "figma"],
+  "capabilities": ["inspect"],
+  "documentAccess": "dynamic-page",
+  "networkAccess": { "allowedDomains": ["none"] }
+}

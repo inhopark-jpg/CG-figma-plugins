@@ -1,0 +1,14 @@
+{
+  "name": "Change Marker",
+  "id": "change-marker-dev",
+  "api": "1.0.0",
+  "main": "code.js",
+  "ui": "ui.html",
+  "editorType": ["figma"],
+  "documentAccess": "dynamic-page",
+  "enablePrivatePluginApi": true,
+  "networkAccess": {
+    "allowedDomains": ["https://api.figma.com"],
+    "reasoning": "Posts and deletes the change-marker comments in this file through Figma's REST API."
+  }
+}

@@ -1,0 +1,1055 @@
+<style>
+/* @ds:begin — generated from doc/design-system. Edit there, then run `node scripts/sync-ds.mjs`. */
+/* =========================================================================
+   Figma Plugins — Shared Design Tokens
+   Source of truth: doc/design-system/. Synced into each plugin by
+   `node scripts/sync-ds.mjs` (see doc/design-system/README.md).
+   =========================================================================
+   Foundation layer: colors, type, resets. Load this before components.css.
+
+   These are Figma plugin UI tokens: every color variable maps to a
+   `--figma-color-*` CSS variable that the Figma desktop app injects at
+   runtime (so the UI auto-matches the user's light/dark theme), with a
+   static fallback for contexts where that variable isn't defined (e.g.
+   previewing this file outside a Figma plugin iframe).
+
+   If you're building a plain web app (not a Figma plugin), just drop the
+   var(--figma-color-*, ...) wrapper and keep the fallback hex as the value.
+   ========================================================================= */
+
+:root {
+  /* ---- color: surfaces ---- */
+  --bg:        var(--figma-color-bg, #fff);              /* page / panel background */
+  --bg-2:      var(--figma-color-bg-secondary, #f5f5f5);  /* recessed surface: headers, code blocks, field backgrounds */
+  --bg-hover:  var(--figma-color-bg-hover, #f0f0f0);      /* hover state for rows, buttons, tabs */
+  --bg-sel:    var(--figma-color-bg-selected, #e5f0ff);   /* selected / active row background */
+
+  /* ---- color: borders & text ---- */
+  --border:    var(--figma-color-border, #e6e6e6);
+  --text:      var(--figma-color-text, #1a1a1a);          /* primary text */
+  --text-2:    var(--figma-color-text-secondary, #888);   /* secondary / muted text, labels, hints */
+  --text-3:    var(--figma-color-text-tertiary, #b3b3b3); /* faint text: prefixes, placeholders, chevrons */
+  --bg-3:      var(--figma-color-bg-tertiary, #e9e9e9);   /* pills, switch track, scrollbar thumb */
+
+  /* ---- color: brand & semantic ---- */
+  --brand:      var(--figma-color-bg-brand, #0d99ff);     /* primary action, active states, focus accents */
+  --brand-text: var(--figma-color-text-onbrand, #fff);    /* text/icon color on top of --brand */
+  --text-brand: var(--figma-color-text-brand, #007be5);   /* brand-colored text on a normal surface (links, aliases) */
+  --red:        var(--figma-color-text-danger, #f24822);  /* error text */
+  /* Status surfaces are mixed from the text color rather than taken from Figma's
+     bg-*-secondary tokens, which are solid fills in the dark theme. */
+  --red-bg:     color-mix(in srgb, var(--red) 12%, var(--bg));   /* error surface (tint) */
+  --red-solid:  var(--figma-color-bg-danger, #f24822);     /* destructive fill (danger button, danger menu hover) */
+  --warn:       var(--figma-color-text-warning, #b86200);  /* warning text */
+  --warn-bg:    color-mix(in srgb, var(--warn) 14%, var(--bg));  /* warning surface (tint) */
+  --success:    var(--figma-color-icon-success, #14ae5c);  /* "live" / ok indicator dot */
+
+  /* ---- elevation (floating layers only: tooltip, menu, dialog) ---- */
+  --shadow-float: 0 8px 24px rgba(0, 0, 0, .3);
+  --scrim:        rgba(0, 0, 0, .35);
+
+  /* ---- typography ---- */
+  --font-ui:   Inter, -apple-system, system-ui, sans-serif;
+  --mono:      ui-monospace, Menlo, Consolas, monospace;
+
+  /* ---- type scale (used inline throughout components.css) ----
+     11px  – secondary/meta text (counts, hints, table sub-lines)
+     12px  – base body size (default on <html>)
+     13px  – panel title
+     Weights: 400 body, 500 buttons/tabs/labels, 600 emphasis/headings */
+}
+
+/* Two extra reference-only tokens some UI components below hard-code by hex
+   rather than a --figma-* variable, because they're Figma editor accent
+   colors (component purple, slot pink) rather than theme-adaptive tokens.
+   Keep them literal if you copy those components. */
+:root {
+  --figma-component-purple: #8a38f5;
+  --figma-slot-pink: #ff45c0;
+}
+
+* { box-sizing: border-box; }
+
+/* Native scrollbars render light-on-light in dark theme, so paint them from
+   theme tokens instead. color-scheme covers overlay scrollbars some
+   platforms draw; the webkit rules cover the rest. */
+html { color-scheme: light dark; }
+::-webkit-scrollbar { width: 11px; height: 11px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background-color: var(--figma-color-bg-tertiary, #c9c9cd);
+  border: 3px solid transparent;
+  border-radius: 6px;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover { background-color: var(--text-2); background-clip: padding-box; }
+
+/* Figma injects its theme <style> ahead of the plugin's HTML, so the page runs
+   in quirks mode, where tables don't inherit font size (they fall back to 16px). */
+table { font-size: inherit; }
+
+html, body {
+  margin: 0; padding: 0; height: 100%;
+  font-family: var(--font-ui);
+  font-size: 12px; color: var(--text); background: var(--bg);
+}
+
+/* =========================================================================
+   Figma Plugins — Shared Component Library
+   =========================================================================
+   Source of truth: doc/design-system/. Do not edit the copy inside a plugin's
+   ui.html (between the @ds markers) — edit here, then `node scripts/sync-ds.mjs`.
+   Load tokens.css first. Every color/spacing value here references a
+   variable from tokens.css — don't hard-code new hex values into a
+   component; add a token instead so both files stay themeable.
+
+   General conventions used throughout:
+   - Border radius: 4px (xs controls) / 5-6px (default) / 50% (circular icon buttons)
+   - Border: 1px solid var(--border) almost everywhere
+   - Font sizes: 11px (meta/secondary), 12px (body/default), 13px (title)
+   - Font weights: 400 (body), 500 (interactive labels), 600 (emphasis)
+   - Hover = var(--bg-hover) background swap, no color/shadow tricks
+   - Active/selected = var(--bg-sel) background + var(--brand) border
+   ========================================================================= */
+
+body { display: flex; flex-direction: column; height: 100vh; }
+
+/* ---- app header ---- */
+header {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 8px 12px; border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+header .hrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+header .title { font-weight: 600; font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* right-hand cluster of the top row: actions, then the language toggle last */
+.hactions { display: flex; align-items: center; gap: 6px; margin-left: auto; flex-shrink: 0; }
+
+/* ---- segmented control (e.g. language switch, unit toggle) ---- */
+.lang-toggle, .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.lang-btn, .seg-btn {
+  border: none; border-radius: 0; padding: 4px 11px; font-size: 12px;
+  background: var(--bg); color: var(--text-2); font-weight: 500; cursor: pointer;
+}
+.seg-btn { padding: 4px 10px; font-size: 11px; font-family: var(--mono); }
+.seg-btn + .seg-btn { border-left: 1px solid var(--border); }
+.lang-btn.active, .seg-btn.active { background: var(--brand); color: var(--brand-text); }
+.seg-btn.active { font-weight: 600; }
+.lang-btn:hover:not(.active), .seg-btn:hover:not(.active) { background: var(--bg-hover); }
+
+/* ---- layout shell: header / scrolling body ---- */
+/* `main` itself never scrolls — only `.tabbody` does, so scrolling inside a
+   tab can't drag the whole panel. */
+main {
+  flex: 1; min-height: 0; padding: 0; position: relative;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.top-fixed { flex-shrink: 0; padding: 12px 12px 0; }
+.tabbody { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; }
+
+.muted { color: var(--text-2); }
+.center-msg {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; height: 100%; gap: 10px; color: var(--text-2); padding: 24px;
+}
+.empty-pane {
+  height: 100%; display: flex; align-items: center; justify-content: center;
+  color: var(--text-2); text-align: center; padding: 8px;
+}
+.empty { padding: 34px 18px; text-align: center; color: var(--text-2); line-height: 1.5; }
+.empty .empty-t { font-weight: 600; color: var(--text); margin-bottom: 4px; font-size: 12px; }
+
+/* ---- buttons ---- */
+button {
+  padding: 7px 12px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--bg); color: var(--text); font-family: inherit; font-size: 12px;
+  cursor: pointer; font-weight: 500;
+}
+button:hover:not(:disabled) { background: var(--bg-hover); }
+button:disabled { opacity: 0.38; cursor: default; }
+button.primary { background: var(--brand); color: var(--brand-text); border-color: var(--brand); }
+button.primary:hover:not(:disabled) { filter: brightness(1.05); }
+button.ghost { border-color: transparent; background: transparent; color: var(--text-2); }
+button.ghost:hover:not(:disabled) { background: var(--bg-hover); }
+button.full { width: 100%; }
+button.sm { padding: 4px 8px; }
+/* Secondary note inside a button, e.g. the scope of an action: "토큰 정리 · 현재 페이지" */
+button .scope { color: var(--text-2); font-weight: 400; }
+button .scope::before { content: '· '; }
+button.xs { padding: 3px 7px; font-size: 11px; border-radius: 4px; }
+
+.icon-btn {
+  width: 30px; height: 26px; padding: 0; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.icon-btn svg { width: 22px; height: 22px; display: block; }
+
+/* ---- breadcrumb / back bar (navigation history) ---- */
+.navbar {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 10px; background: var(--bg-2);
+  border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.navbar .trail {
+  flex: 1; min-width: 0; font-size: 11px; color: var(--text); font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.navbtn {
+  width: 26px; height: 26px; padding: 0; border-radius: 50%; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border); background: var(--bg); color: var(--text);
+}
+.navbtn svg { width: 15px; height: 15px; display: block; }
+.navbtn:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--text-2); }
+.navbar .lang-toggle, header .lang-toggle { flex-shrink: 0; }
+/* the language toggle is always compact in the top row (header or navbar) */
+.navbar .lang-btn, header .lang-btn { padding: 2px 8px; font-size: 11px; }
+
+/* ---- floating tooltip ---- */
+/* position:fixed and outside scroll containers, so a pane with overflow:auto
+   can't clip it. */
+.tip {
+  position: fixed; z-index: 200; max-width: 250px;
+  background: var(--figma-color-bg-inverse, #1e1e1e);
+  color: var(--figma-color-text-oninverse, #fff);
+  padding: 7px 9px; border-radius: 6px; font-size: 11px; line-height: 1.45;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .3); pointer-events: none;
+}
+.tinfo {
+  width: 11px; height: 11px; margin-left: 4px; flex-shrink: 0;
+  display: inline-flex; align-items: center; vertical-align: -1px;
+  opacity: .8; cursor: help; pointer-events: auto;
+}
+.tinfo:hover { opacity: 1; }
+.tinfo svg { width: 100%; height: 100%; display: block; }
+
+/* ---- resizable panes (drag handle, like a layers panel) ---- */
+.rbox { position: relative; }
+.rbox-body { overflow-y: auto; overflow-x: hidden; }
+.rhandle {
+  height: 11px; margin: 0 0 4px; cursor: ns-resize; user-select: none;
+  display: flex; align-items: center; justify-content: center;
+}
+.rhandle::after {
+  content: ""; width: 30px; height: 2px; border-radius: 2px;
+  background: var(--border); transition: background .1s ease;
+}
+.rhandle:hover::after { background: var(--text-2); }
+
+/* ---- tabs ---- */
+.tabs {
+  display: flex; gap: 2px; margin: 0 -12px 0; padding: 0 10px;
+  background: var(--bg); border-bottom: 1px solid var(--border);
+}
+.tab {
+  border: none; background: transparent; border-radius: 0; margin-bottom: -1px;
+  padding: 9px 10px; font-size: 12px; font-weight: 500; color: var(--text-2);
+  border-bottom: 2px solid transparent; cursor: pointer;
+  display: flex; align-items: center; gap: 5px; white-space: nowrap;
+}
+.tab:hover:not(:disabled) { background: transparent; }
+.tab:hover:not(:disabled):not(.active) { color: var(--text); }
+.tab.active { color: var(--text); font-weight: 600; border-bottom-color: var(--brand); }
+.tab:disabled { opacity: .35; cursor: default; }
+.tab .tb {
+  font-size: 10px; font-weight: 600; color: var(--text-2);
+  background: var(--figma-color-bg-tertiary, #e9e9e9);
+  border-radius: 8px; padding: 0 6px; line-height: 15px;
+}
+.tab.active .tb { color: var(--text); }
+
+/* ---- collapsible section ---- */
+.sec { margin: 0 -12px; }
+.sec-head {
+  position: sticky; top: -12px; z-index: 5;
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 12px; background: var(--bg-2);
+  border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+  font-weight: 600; font-size: 12px; cursor: pointer; user-select: none;
+}
+.sec-head:hover { background: var(--bg-hover); }
+.sec-head .caret {
+  width: 15px; flex-shrink: 0; color: var(--text-2); font-size: 14px;
+  line-height: 1; transition: transform .1s ease; display: inline-block;
+  transform-origin: 45% 50%;
+}
+.sec-head.closed .caret { transform: rotate(-90deg); }
+.sec-head .sc { color: var(--text-2); font-weight: 400; }
+.sec-actions { margin-left: auto; display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.sec-actions button { font-weight: 500; }
+.sec-actions .mini {
+  padding: 2px 4px; font-size: 11px; border: 1px solid var(--border);
+  border-radius: 5px; background: var(--bg); color: var(--text);
+  font-family: inherit; font-weight: 500;
+}
+.sec-actions .mini:disabled { opacity: .45; }
+.sec-body { padding: 8px 12px 10px; }
+.sec-body.hidden { display: none; }
+
+/* ---- property row (label / value pair) ---- */
+.prow { display: flex; align-items: baseline; gap: 8px; padding: 2px 0; line-height: 1.5; }
+.prow .pk { color: var(--text-2); width: 104px; flex-shrink: 0; }
+.prow .pv { flex: 1; min-width: 0; word-break: break-word; }
+.prow.flag .pv { color: var(--brand); font-weight: 600; }
+.copy { cursor: pointer; border-radius: 3px; padding: 1px 3px; margin: 0 -3px; }
+.copy:hover { background: var(--bg-hover); }
+.mono { font-family: var(--mono); }
+
+/* ---- token pill (e.g. a bound variable name) ---- */
+.tok {
+  display: inline-block; margin-left: 6px; font-size: 11px; font-family: var(--mono);
+  padding: 1px 6px; border-radius: 4px; word-break: break-all; cursor: pointer;
+  background: var(--figma-color-bg-tertiary, #e9e9e9);
+  color: var(--text); border: 1px solid var(--border);
+}
+.tok:hover { background: var(--bg-hover); border-color: var(--text-2); }
+.tok-none {
+  display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 4px;
+  color: var(--text-2); border: 1px dashed var(--border); font-style: italic;
+}
+
+/* ---- swatch (color preview square) ---- */
+.sw {
+  width: 10px; height: 10px; border-radius: 2px; border: 1px solid var(--border);
+  display: inline-block; vertical-align: -1px; margin-right: 5px; flex-shrink: 0;
+}
+
+/* checkerboard background for translucent/transparent content previews */
+.checker {
+  background-color: #f0f0f2;
+  background-image:
+    linear-gradient(45deg, #dededf 25%, transparent 25%, transparent 75%, #dededf 75%),
+    linear-gradient(45deg, #dededf 25%, transparent 25%, transparent 75%, #dededf 75%);
+  background-size: 10px 10px;
+  background-position: 0 0, 5px 5px;
+}
+
+/* ---- labeled field chip (e.g. layout inspector: "W 240") ---- */
+.lp { display: flex; flex-direction: column; gap: 8px; }
+.lp-row { display: flex; align-items: flex-start; gap: 8px; }
+.lp-row .lp-label { width: 96px; flex-shrink: 0; color: var(--text-2); padding-top: 5px; line-height: 1.3; }
+.lp-fields { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.lp-fields.cols4 { display: grid; grid-template-columns: repeat(4, 1fr); flex-wrap: nowrap; }
+.lp-fields.cols4 .lp-field { min-width: 0; }
+.lp-fields.cols4 .lp-fv { overflow: hidden; text-overflow: ellipsis; }
+.lp-field {
+  display: inline-flex; align-items: center; gap: 5px; min-width: 0;
+  padding: 4px 7px; border: 1px solid var(--border); border-radius: 5px;
+  background: var(--bg-2); max-width: 100%;
+}
+.lp-field .lp-fk {
+  font-size: 10px; font-weight: 600; color: var(--text-2); flex-shrink: 0;
+  letter-spacing: .02em; text-transform: uppercase;
+}
+.lp-field .lp-fv { font-family: var(--mono); word-break: break-all; }
+.lp-field .lp-fm { color: var(--text-2); font-size: 11px; flex-shrink: 0; }
+.lp-field .tok { margin-left: 1px; }
+.lp-ic { width: 12px; height: 12px; flex-shrink: 0; color: var(--text-2); display: inline-flex; }
+.lp-ic svg { width: 100%; height: 100%; display: block; }
+
+/* ---- checkbox row (custom checkbox, ticks/toggles) ---- */
+.lp-check, .hcheck {
+  display: inline-flex; align-items: center; gap: 6px; color: var(--text-2);
+}
+.hcheck { gap: 5px; flex-shrink: 0; padding: 2px 5px; border-radius: 4px; cursor: pointer; user-select: none; font-weight: 500; }
+.hcheck:hover { background: var(--bg-hover); color: var(--text); }
+.hcheck.on { color: var(--text); }
+.lp-check .box, .hcheck .box {
+  width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--border);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 9px; line-height: 1; flex-shrink: 0; background: var(--bg);
+}
+.lp-check.on .box, .hcheck.on .box { background: var(--brand); border-color: var(--brand); color: var(--brand-text); }
+.lp-check.on { color: var(--text); }
+
+/* ---- subsection divider inside a section (e.g. Fill / Stroke groups) ---- */
+.subsec {
+  font-weight: 600; margin: 12px 0 6px; padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.subsec:first-child { margin-top: 0; padding-top: 0; border-top: none; }
+
+/* ---- data table ---- */
+.tr-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 6px; }
+/* table-layout:fixed makes a dragged column width land exactly */
+.tr-table { border-collapse: separate; border-spacing: 0; min-width: 100%; font-size: 12px; table-layout: fixed; }
+.tr-table th, .tr-table td {
+  padding: 6px 9px; text-align: left; vertical-align: top;
+  border-bottom: 1px solid var(--border); white-space: pre-wrap; overflow-wrap: break-word;
+}
+.tr-table tr:last-child th, .tr-table tr:last-child td { border-bottom: none; }
+.tr-table thead th {
+  background: var(--bg-2); font-weight: 600; position: sticky; top: 0; z-index: 2;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tr-table thead th .tr-def { color: var(--text-2); font-weight: 400; font-size: 11px; }
+.tr-name {
+  position: sticky; left: 0; z-index: 1; background: var(--bg);
+  font-weight: 600; word-break: break-all; border-right: 1px solid var(--border);
+}
+.tr-desc { color: var(--text-2); font-weight: 400; word-break: break-word; border-right: 1px solid var(--border); }
+.tr-desc.none { color: var(--text-2); opacity: .55; }
+.tr-table thead .tr-name { z-index: 3; background: var(--bg-2); }
+.tr-table tbody tr { cursor: pointer; }
+.tr-table tbody td:hover, .tr-table tbody .tr-name:hover { background: var(--bg-hover); }
+.tr-table td.empty { color: var(--red); font-style: italic; }
+.tr-sub { color: var(--text-2); font-weight: 400; font-size: 11px; margin-top: 2px; }
+/* copy affordance revealed on cell hover */
+.cp-ic { margin-left: 5px; color: var(--text-2); visibility: hidden; font-size: 11px; }
+.tr-table td:hover .cp-ic, .tr-table .tr-name:hover .cp-ic { visibility: visible; }
+/* column resize handle */
+.colres { position: absolute; top: 0; right: -4px; bottom: 0; width: 9px; cursor: col-resize; z-index: 6; }
+.colres::after {
+  content: ""; position: absolute; left: 4px; top: 0; bottom: 0; width: 1px;
+  background: var(--brand); opacity: 0; transition: opacity .1s ease;
+}
+.colres:hover::after, .colres.on::after { opacity: 1; }
+.tr-pad { padding: 0 !important; }
+
+/* ---- form controls ---- */
+select, .exp-num, .exp-suffix {
+  padding: 5px 6px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); color: var(--text); font-family: inherit; font-size: 12px;
+}
+select { font-size: 11px; cursor: pointer; }
+select:disabled { opacity: .4; cursor: default; }
+.exp-num { width: 56px; padding: 5px 6px; }
+
+/* range slider */
+.thumb-size {
+  width: 64px; height: 20px; margin: 0 3px; padding: 0; cursor: pointer; flex-shrink: 0;
+  -webkit-appearance: none; appearance: none; background: transparent;
+}
+.thumb-size::-webkit-slider-runnable-track { height: 5px; border-radius: 3px; background: var(--text-2); opacity: .5; }
+.thumb-size:hover::-webkit-slider-runnable-track { opacity: .75; }
+.thumb-size::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; margin-top: -4px;
+  width: 13px; height: 13px; border-radius: 50%;
+  background: var(--brand); cursor: pointer;
+  border: 2px solid var(--bg); box-shadow: 0 0 0 1px var(--text-2);
+}
+
+/* ---- card ---- */
+.card { border: 1px solid var(--border); border-radius: 6px; padding: 7px 9px; margin-bottom: 6px; }
+.card-head { display: flex; align-items: center; gap: 6px; }
+.card-head .ch-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.card-head .ch-sub { color: var(--text-2); font-size: 11px; }
+.card.own { border-color: var(--brand); }
+.card.clickable { cursor: pointer; }
+.card.clickable:hover { background: var(--bg-hover); }
+/* selected/picked state, reused for tree rows and cards alike */
+.picked { background: var(--bg-sel) !important; border-color: var(--brand) !important; border-radius: 6px; }
+
+/* ---- header/summary card (e.g. an inspected item's identity block) ---- */
+.var-head { background: var(--bg-2); border-radius: 6px; padding: 8px 10px; }
+.var-head .leaf { font-weight: 600; word-break: break-all; }
+.var-head .grp { color: var(--text-2); font-size: 11px; word-break: break-all; margin-top: 3px; }
+.var-head .desc {
+  margin-top: 7px; padding-top: 7px; border-top: 1px solid var(--border);
+  color: var(--text-2); line-height: 1.45; white-space: pre-wrap; word-break: break-word;
+}
+.badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.badge {
+  font-size: 11px; padding: 1px 7px; border-radius: 10px;
+  background: var(--bg); border: 1px solid var(--border); color: var(--text-2);
+}
+.badge.b-main { background: var(--bg); border-color: var(--text-2); color: var(--text); font-weight: 600; }
+.head-actions { display: flex; gap: 6px; margin-top: 8px; }
+.head-actions button { flex: 1; }
+
+/* ---- style pill (e.g. a picked text/fill/effect style) ---- */
+.style-pill {
+  display: flex; align-items: center; gap: 6px; width: 100%;
+  padding: 7px 9px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); cursor: pointer; text-align: left; margin-bottom: 6px;
+}
+.style-pill:hover { background: var(--bg-hover); }
+.style-pill .sp-name { flex: 1; min-width: 0; font-weight: 600; word-break: break-all; }
+.style-pill .sp-hint { color: var(--text-2); font-size: 11px; flex-shrink: 0; }
+.sp-icon {
+  width: 15px; height: 15px; flex-shrink: 0; color: var(--text-2);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.sp-icon svg { width: 100%; height: 100%; display: block; }
+.thidden { font-size: 11px; color: var(--text-2); flex-shrink: 0; }
+
+/* ---- tree row (nested, expandable list — e.g. a layer/component tree) ---- */
+.trow {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 6px; border-radius: 6px; cursor: pointer; border: 1px solid transparent;
+  user-select: none;
+}
+.trow:hover { background: var(--bg-hover); }
+.trow.current { cursor: default; }
+.trow.self { background: var(--bg-sel); border-color: var(--brand); }
+.trow.origin { background: var(--bg-sel); border-color: var(--brand) !important; }
+.trow .tname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trow .tsub { color: var(--text-2); font-size: 11px; flex-shrink: 0; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trow .tglyph { flex-shrink: 0; color: var(--text-2); font-size: 11px; }
+.tkids { margin-left: 9px; padding-left: 8px; border-left: 1px solid var(--border); }
+.tcount { color: var(--text-2); font-size: 11px; flex-shrink: 0; }
+.tcaret {
+  width: 17px; height: 17px; flex-shrink: 0; text-align: center; color: var(--text-2);
+  font-size: 14px; line-height: 17px; cursor: pointer; border-radius: 3px;
+  transform-origin: 45% 50%;
+}
+.tcaret:hover { background: var(--bg-hover); color: var(--text); }
+.tcaret.closed { transform: rotate(-90deg); }
+.tcaret.leaf { cursor: default; opacity: 0; }
+/* secondary action revealed only on hover of its row */
+.trow .tmain { visibility: hidden; }
+.trow:hover .tmain, .trow.current .tmain { visibility: visible; }
+
+/* ---- thumbnail (with checkerboard for transparency) ---- */
+.tthumb, .icon-prev {
+  flex-shrink: 0; border: 1px solid var(--border); border-radius: 3px; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+}
+.tthumb {
+  margin-right: 2px;
+  background-color: #f0f0f2;
+  background-image:
+    linear-gradient(45deg, #dededf 25%, transparent 25%, transparent 75%, #dededf 75%),
+    linear-gradient(45deg, #dededf 25%, transparent 25%, transparent 75%, #dededf 75%);
+  background-size: 8px 8px; background-position: 0 0, 4px 4px;
+}
+.tthumb img, .icon-prev img { max-width: 100%; max-height: 100%; display: block; }
+.icon-prev {
+  width: 44px; height: 44px; margin-right: 9px; border-radius: 4px;
+  background-color: #f0f0f2;
+  background-image:
+    linear-gradient(45deg, #dededf 25%, transparent 25%, transparent 75%, #dededf 75%),
+    linear-gradient(45deg, #dededf 25%, transparent 25%, transparent 75%, #dededf 75%);
+  background-size: 10px 10px; background-position: 0 0, 5px 5px;
+}
+.icon-prev img { max-width: 82%; max-height: 82%; }
+
+/* ---- category tags (fixed brand colors — match Figma's own editor accents) ---- */
+/* Slot pink, matching the color Figma gives slots in the editor. */
+.tslot {
+  flex-shrink: 0; font-size: 10px; font-weight: 600; line-height: 16px;
+  text-transform: uppercase; letter-spacing: .03em; padding: 0 6px; border-radius: 8px;
+  color: var(--figma-slot-pink); background: rgba(255, 69, 192, .14); border: 1px solid rgba(255, 69, 192, .45);
+}
+/* Component purple, matching the color Figma gives components in the editor. */
+.tvariant {
+  flex-shrink: 0; font-size: 10px; font-weight: 600; line-height: 16px;
+  text-transform: uppercase; letter-spacing: .03em; padding: 0 6px; border-radius: 8px;
+  color: var(--figma-component-purple); background: rgba(138, 56, 245, .14); border: 1px solid rgba(138, 56, 245, .5);
+}
+.text-badge {
+  flex-shrink: 0; font-size: 10px; font-weight: 600; line-height: 16px;
+  text-transform: uppercase; letter-spacing: .03em; padding: 0 6px; border-radius: 8px;
+  color: var(--text-2); border: 1px solid var(--border); background: var(--bg-2);
+}
+
+/* ---- auto layout direction widget ---- */
+.al-widget { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.al-grid {
+  width: 46px; height: 46px; flex-shrink: 0; padding: 4px;
+  display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr);
+  border: 1px solid var(--border); border-radius: 4px; background: var(--bg-2);
+}
+.al-cell { display: flex; align-items: center; justify-content: center; }
+.al-cell .dot { width: 2px; height: 2px; border-radius: 50%; background: var(--text-2); opacity: .55; }
+.al-bars { display: flex; align-items: center; justify-content: center; gap: 2px; }
+.al-bars.spread { justify-content: space-between; }
+.al-bars.h { flex-direction: row; height: 100%; }
+.al-bars.v { flex-direction: column; width: 100%; }
+.al-bar { background: var(--brand); border-radius: 1px; }
+.al-bars.h .al-bar { width: 3px; height: 9px; }
+.al-bars.v .al-bar { width: 9px; height: 3px; }
+.al-caption .al-dir { font-weight: 600; }
+.al-caption .al-sub { color: var(--text-2); font-size: 11px; margin-top: 2px; }
+
+/* ---- content / code preview box ---- */
+.content-box {
+  font-family: var(--mono); background: var(--bg-2); padding: 6px 8px;
+  border-radius: 4px; word-break: break-word; white-space: pre-wrap; max-height: 120px; overflow-y: auto;
+}
+.detail-box { border-left: 2px solid var(--border); padding: 4px 0 4px 10px; margin: 0 0 8px 4px; }
+.hidden-flag { color: var(--text-2); font-size: 11px; }
+
+/* ---- pagination ---- */
+.pager {
+  position: sticky; top: 22px; z-index: 4;
+  display: flex; align-items: center; gap: 6px;
+  margin: 0 -12px 8px; padding: 6px 12px;
+  background: var(--bg); border-bottom: 1px solid var(--border);
+}
+.pager .pgbtn { display: inline-flex; align-items: center; padding: 2px 5px; }
+.pager .pgbtn svg { width: 13px; height: 13px; display: block; }
+.pager .pgbtn:disabled { opacity: .35; cursor: default; }
+.pg-n { font-weight: 600; font-size: 11px; }
+.pg-range { margin-left: auto; color: var(--text-2); font-size: 11px; }
+
+/* ---- misc row/list primitives seen across panels ---- */
+.paint-row { display: flex; align-items: baseline; flex-wrap: wrap; padding: 2px 0; line-height: 1.5; }
+.paint-row .pv-line { width: 100%; }
+.pv-line { margin-top: 3px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.pv-line .tok { margin-left: 0; }
+.arrow { color: var(--text-2); flex-shrink: 0; }
+.sc-row { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border: 1px solid transparent; border-radius: 6px; cursor: pointer; }
+.sc-row:hover { background: var(--bg-hover); }
+.sc-sw {
+  width: 16px; height: 16px; border-radius: 4px; flex-shrink: 0; border: 1px solid var(--border);
+  background-image:
+    linear-gradient(45deg, #c8c8cc 25%, transparent 25%, transparent 75%, #c8c8cc 75%),
+    linear-gradient(45deg, #c8c8cc 25%, transparent 25%, transparent 75%, #c8c8cc 75%);
+  background-size: 8px 8px; background-position: 0 0, 4px 4px; background-color: #fff;
+  position: relative; overflow: hidden;
+}
+.sc-sw i { position: absolute; inset: 0; display: block; }
+.sc-val { font-family: var(--mono); flex-shrink: 0; }
+.sc-mid { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.sc-count { color: var(--text-2); font-size: 11px; flex-shrink: 0; }
+.eff-item { padding: 4px 0 0; }
+.eff-item + .eff-item { border-top: 1px dashed var(--border); margin-top: 4px; }
+.eff-title { display: flex; align-items: center; gap: 6px; }
+.eff-title .et-label { font-weight: 500; }
+.eff-title .et-sum { color: var(--text-2); font-family: var(--mono); font-size: 11px; word-break: break-all; }
+
+/* ---- Export-panel specific composites ---- */
+.exp-row { display: flex; align-items: center; gap: 4px; margin-bottom: 6px; flex-shrink: 0; }
+.exp-row .grow { flex: 1; min-width: 0; }
+.exp-row select { min-width: 0; }
+.dots { letter-spacing: 1px; padding: 4px 6px; }
+.dots.on { color: var(--brand); background: var(--bg-sel); }
+.dots.has-opts:not(.on) { color: var(--text); }
+.exp-more { border: 1px solid var(--border); border-radius: 6px; padding: 8px 9px; margin: 0 0 8px; background: var(--bg-2); }
+.exp-more-t { font-weight: 600; margin-bottom: 6px; }
+.exp-more .pk { width: 92px; }
+.exp-more select, .exp-suffix { width: 100%; }
+.exp-checks { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.exp-more .hcheck { padding-left: 0; }
+.exp-preview { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 8px; }
+.exp-preview-box {
+  margin-top: 8px; padding: 10px; border: 1px solid var(--border); border-radius: 6px;
+  display: flex; align-items: center; justify-content: center; min-height: 60px;
+  background-color: #f0f0f2;
+  background-image:
+    linear-gradient(45deg, #dededf 25%, transparent 25%, transparent 75%, #dededf 75%),
+    linear-gradient(45deg, #dededf 25%, transparent 25%, transparent 75%, #dededf 75%);
+  background-size: 12px 12px; background-position: 0 0, 6px 6px;
+}
+.exp-preview-img { max-width: 100%; max-height: 220px; display: block; }
+.exp-controls { display: flex; gap: 6px; align-items: center; margin-top: 8px; }
+.exp-controls .grow { flex: 1; }
+.tok-opts { margin: 0 0 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+.tok-opts-head { display: flex; align-items: center; gap: 4px; color: var(--text-2); font-size: 11px; margin-bottom: 6px; }
+.all-opts { padding-top: 2px; }
+
+/* =========================================================================
+   Additions shared by i18n / Config Manager / Arrow Connect /
+   Change Marker. Same visual language as above: tokens only, 6px radius,
+   12px text, hover = --bg-hover, focus/selected = --brand.
+   ========================================================================= */
+
+/* ---- text inputs ---- */
+input:not([type]), input[type="text"], input[type="password"], input[type="number"],
+input[type="search"], input[type="date"], textarea {
+  padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); color: var(--text); font-family: inherit; font-size: 12px;
+  min-width: 0;
+}
+textarea { line-height: 1.4; resize: vertical; }
+input:not([type]):focus, input[type="text"]:focus, input[type="password"]:focus, input[type="number"]:focus,
+input[type="search"]:focus, input[type="date"]:focus, textarea:focus, select:focus { outline: none; border-color: var(--brand); }
+input:disabled, textarea:disabled { opacity: .4; }
+input.invalid, textarea.invalid { border-color: var(--red); }
+::placeholder { color: var(--text-3); }
+/* borderless until hovered — inline rename fields */
+input.bare { border-color: transparent; background: transparent; }
+input.bare:hover { border-color: var(--border); }
+input.bare:focus { border-color: var(--brand); background: var(--bg); }
+
+/* labeled field: small muted label above its control */
+.field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+.field > label, .field > .lbl { color: var(--text-2); font-size: 11px; font-weight: 500; }
+.field-err { color: var(--red); font-size: 11px; }
+
+/* ---- semantic buttons ---- */
+button.danger { color: var(--red); }
+button.danger-fill { background: var(--red-solid); border-color: var(--red-solid); color: var(--brand-text); }
+button.danger-fill:hover:not(:disabled) { background: var(--red-solid); filter: brightness(1.05); }
+button.selected { background: var(--bg-sel); border-color: transparent; color: var(--text-brand); }
+button.selected:disabled { opacity: 1; }
+
+/* ---- small pills: warning / danger / link variants of .badge ---- */
+.badge.warn { background: var(--warn-bg); border-color: transparent; color: var(--warn); }
+.badge.danger { background: var(--red-bg); border-color: transparent; color: var(--red); }
+.badge.link { background: var(--bg-sel); border-color: transparent; color: var(--text-brand); cursor: pointer; }
+
+/* ---- inline notices ---- */
+.notice {
+  display: flex; align-items: center; gap: 8px; padding: 7px 9px; margin-bottom: 8px;
+  border: 1px dashed var(--border); border-radius: 6px; color: var(--text-2); font-size: 11px; line-height: 1.4;
+}
+.notice > span:not(.ico) { flex: 1; }
+/* Colored text on a tinted surface is hard to read (especially in dark mode),
+   so status notices keep body text at --text and carry the color in a left bar. */
+.notice.err, .notice.warn, .notice.info {
+  border-style: solid; border-width: 1px 1px 1px 3px; color: var(--text); font-size: 12px; line-height: 1.45;
+}
+.notice.err { border-color: var(--red); background: var(--red-bg); }
+.notice.warn { border-color: var(--warn); background: var(--warn-bg); }
+.notice.info { border-color: var(--border); border-left-color: var(--brand); background: var(--bg-2); }
+.notice .ico { flex: 0 0 14px; width: 14px; height: 14px; margin-top: 1px; }
+.notice.err .ico { color: var(--red); }
+.notice.warn .ico { color: var(--warn); }
+
+/* ---- toast (in-panel, bottom) ---- */
+.toast {
+  position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 60;
+  padding: 8px 10px; border-radius: 6px; font-size: 12px; white-space: pre-line;
+  background: var(--red-bg); color: var(--red); display: none;
+}
+.toast.show { display: block; }
+.toast.warn { background: var(--warn-bg); color: var(--warn); }
+
+/* ---- modal dialog (Figma's iframe blocks window.confirm/prompt) ---- */
+.overlay {
+  position: fixed; inset: 0; z-index: 100; padding: 16px;
+  background: var(--scrim); display: flex; align-items: center; justify-content: center;
+}
+.dialog {
+  width: 100%; max-width: 360px; padding: 12px; border-radius: 6px;
+  background: var(--bg); border: 1px solid var(--border); box-shadow: var(--shadow-float);
+  display: flex; flex-direction: column; gap: 12px;
+}
+.dialog input { width: 100%; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 6px; }
+
+/* ---- dropdown menu (dark, like Figma's own menus) ---- */
+.menu {
+  position: fixed; z-index: 110; min-width: 200px; max-width: 320px; padding: 6px;
+  background: var(--figma-color-bg-menu, #1e1e1e); color: var(--figma-color-text-menu, #fff);
+  border-radius: 6px; box-shadow: var(--shadow-float);
+  font-size: 12px; line-height: 18px; display: flex; flex-direction: column;
+}
+.menu input[type="text"] {
+  background: rgba(255, 255, 255, .08); border-color: transparent; color: inherit; margin-bottom: 4px;
+}
+.menu input[type="text"]:focus { border-color: var(--brand); }
+.menu-list { overflow-y: auto; }
+.menu-group { padding: 6px 8px 2px; font-size: 11px; opacity: .55; }
+.menu-item { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
+.menu-item .meta { margin-left: auto; opacity: .55; font-size: 11px; white-space: nowrap; }
+.menu-item .check { width: 12px; flex: none; text-align: center; }
+.menu-item:hover, .menu-item.active { background: var(--brand); color: var(--brand-text); }
+.menu-item:hover .meta, .menu-item.active .meta { opacity: .85; }
+.menu-item.danger { color: var(--figma-color-text-menu-danger, #ff8a7a); }
+.menu-item.danger:hover, .menu-item.danger.active { background: var(--red-solid); color: var(--brand-text); }
+.menu-empty { padding: 8px; opacity: .6; }
+.menu-sep { height: 1px; margin: 4px 2px; background: rgba(255, 255, 255, .12); }
+
+/* ---- toggle switch (on <input type=checkbox class=switch> or a <span>) ---- */
+.switch {
+  appearance: none; -webkit-appearance: none; position: relative; flex: none; margin: 0; cursor: pointer;
+  width: 28px; height: 16px; border-radius: 8px; background: var(--bg-3); transition: background .12s;
+}
+.switch::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 6px;
+  background: var(--figma-color-icon-onbrand, #fff); box-shadow: 0 1px 2px rgba(0, 0, 0, .25); transition: left .12s;
+}
+.switch:checked, .switch.on { background: var(--brand); }
+.switch:checked::after, .switch.on::after { left: 14px; }
+.switch:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+/* ---- window resize grip (bottom-right; plugin resizes itself via figma.ui.resize) ---- */
+.resize-grip {
+  position: fixed; right: 0; bottom: 0; width: 14px; height: 14px; cursor: nwse-resize; z-index: 120;
+  background: linear-gradient(135deg, transparent 50%, var(--text-3) 50%, var(--text-3) 58%, transparent 58%,
+    transparent 70%, var(--text-3) 70%, var(--text-3) 78%, transparent 78%);
+}
+
+/* ---- busy spinner ---- */
+.spin {
+  width: 13px; height: 13px; border-radius: 50%; flex-shrink: 0; display: inline-block;
+  border: 2px solid var(--border); border-top-color: var(--brand); animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---- footer bar ---- */
+.foot {
+  flex-shrink: 0; padding: 8px 12px; border-top: 1px solid var(--border);
+  font-size: 11px; color: var(--text-2); line-height: 1.4;
+}
+/* @ds:end */
+
+  /* ---- Arrow Connect only (shared pieces come from the block above) ---- */
+  body { line-height: 1.45; user-select: none; }
+  section { padding: 12px; border-bottom: 1px solid var(--border); }
+  section:last-of-type { border-bottom: 0; }
+  section .title { font-weight: 600; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; white-space: nowrap; }
+  section .title .muted { font-size: 11px; overflow: hidden; text-overflow: ellipsis; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+  .row:last-child { margin-bottom: 0; }
+  .row > label { color: var(--text-2); width: 44px; flex: none; }
+
+  /* Context card */
+  #card { min-height: 92px; display: flex; flex-direction: column; justify-content: center; gap: 8px; }
+  .card-msg { display: flex; align-items: center; gap: 10px; }
+  .card-msg svg { flex: none; color: var(--text-2); }
+  .pair { display: flex; align-items: center; gap: 6px; font-weight: 500; }
+  .pair span { max-width: 92px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    padding: 3px 6px; border-radius: 4px; background: var(--bg-2); }
+  .btns { display: flex; gap: 6px; }
+  .btns button { flex: 1; }
+
+  /* Side pickers — the accent is the arrow's own color, set from JS */
+  .sides { display: flex; gap: 10px; }
+  .side { flex: 1; }
+  .side-label { color: var(--text-2); margin-bottom: 4px; }
+  .picker { position: relative; height: 64px; border-radius: 6px; background: var(--bg-2); }
+  .picker .box { position: absolute; inset: 16px 26px; border-radius: 3px; border: 1px solid var(--text-3); }
+  .picker button, .picker button:hover:not(:disabled) { position: absolute; border: 0; padding: 0; background: none; }
+  .picker .edge::after { content: ''; position: absolute; inset: 0; margin: auto; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--bg); border: 1.5px solid var(--text-3); }
+  .picker .edge { width: 22px; height: 22px; }
+  .picker .edge[data-v="top"] { top: 5px; left: calc(50% - 11px); }
+  .picker .edge[data-v="bottom"] { bottom: 5px; left: calc(50% - 11px); }
+  .picker .edge[data-v="left"] { left: 15px; top: calc(50% - 11px); }
+  .picker .edge[data-v="right"] { right: 15px; top: calc(50% - 11px); }
+  .picker .edge:hover::after { border-color: var(--text-2); }
+  .picker .edge[aria-pressed="true"]::after { background: var(--accent); border-color: var(--accent); }
+  .picker .auto { inset: 22px 34px; border-radius: 4px; font-size: 11px; font-weight: 500; color: var(--text-2); }
+  .picker .auto:hover:not(:disabled) { color: var(--text); }
+  .picker .auto[aria-pressed="true"], .picker .auto[aria-pressed="true"]:hover { color: var(--brand-text); background: var(--accent); }
+
+  /* Colors — swatch fills are data (the arrow colors), set inline */
+  .swatches { display: flex; flex: 1; gap: 4px; }
+  .swatch { width: 18px; height: 18px; flex: none; border-radius: 50%; border: 0; cursor: pointer; padding: 0; position: relative; }
+  .swatch[aria-pressed="true"]::after { content: ''; position: absolute; inset: -3px; border-radius: 50%; border: 2px solid var(--text); }
+  .custom { position: relative; overflow: hidden; background: conic-gradient(red, yellow, lime, cyan, blue, magenta, red); }
+  .custom input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+  .label-head { display: flex; justify-content: space-between; align-items: center; color: var(--text-2); }
+  #labelText { width: 100%; margin-top: 8px; }
+
+  /* Footer */
+  footer { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px;
+    border-top: 1px solid var(--border); color: var(--text-2); font-size: 11px; }
+  .live { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .live i { width: 7px; height: 7px; border-radius: 50%; background: var(--success); }
+  .live.off i { background: var(--text-3); }
+  .link, .link:hover:not(:disabled) { border: 0; background: none; padding: 0; font-size: 11px; font-weight: 500; color: var(--text-brand); }
+  .link:hover:not(:disabled) { text-decoration: underline; }
+  [hidden] { display: none !important; }
+</style>
+
+<header>
+  <div class="hrow">
+    <div class="title">Arrow Connect</div>
+    <div class="hactions"><div class="lang-toggle" id="langToggle"></div></div>
+  </div>
+</header>
+
+<section id="card"></section>
+
+<section>
+  <div class="title"><span id="styleTitle"></span><span class="muted" id="styleHint"></span></div>
+
+  <div class="sides row" id="sidesRow">
+    <div class="side"><div class="side-label" data-i18n="start"></div><div class="picker" data-key="fromSide"></div></div>
+    <div class="side"><div class="side-label" data-i18n="end"></div><div class="picker" data-key="toSide"></div></div>
+  </div>
+
+  <div class="row">
+    <label data-i18n="color"></label>
+    <div class="swatches" id="swatches"></div>
+  </div>
+
+  <div class="row" style="display:block" id="labelRow">
+    <div class="label-head">
+      <span data-i18n="showLabel"></span>
+      <input type="checkbox" class="switch" id="label" />
+    </div>
+    <input type="text" id="labelText" hidden />
+  </div>
+</section>
+
+<footer>
+  <span class="live" id="live"><i></i><span id="liveText"></span></span>
+  <button class="link" id="refresh" data-i18n="refreshAll"></button>
+</footer>
+
+<script>
+  // Arrow colors are data (written onto the canvas), not UI chrome.
+  const COLORS = [
+    ['#8A38F5', 'purple'], ['#0D99FF', 'blue'], ['#14AE5C', 'green'], ['#FFA629', 'orange'],
+    ['#F24822', 'red'], ['#FF24BD', 'pink'], ['#757575', 'gray'], ['#1E1E1E', 'black'],
+  ]
+
+  // ---- i18n (main-thread strings live in MSG in code.ts) ----
+  const I18N = {
+    ko: {
+      start: '시작', end: '끝', color: '색상', showLabel: 'Label 표시', labelPlaceholder: 'Label 텍스트',
+      refreshAll: '모두 새로고침', liveTitle: 'Live가 켜져 있으면 화살표가 layer를 따라갑니다',
+      live: (n) => `Live · 화살표 ${n}개`, paused: '일시정지',
+      side: { top: '위쪽', right: '오른쪽', bottom: '아래쪽', left: '왼쪽' },
+      autoTitle: '마주 보는 면을 자동으로 선택', auto: '자동', customColor: '사용자 지정 색상',
+      colors: { purple: '보라', blue: '파랑', green: '초록', orange: '주황', red: '빨강', pink: '분홍', gray: '회색', black: '검정' },
+      manyOnLayer: (n) => `이 layer에 화살표 ${n}개`,
+      manyOnLayerHint: '편집할 화살표를 선택하거나, 다른 layer를 Shift-클릭해 연결하세요.',
+      selectTwo: 'Layer 두 개를 선택하세요', selectTwoHint: '시작 layer를 클릭한 뒤, 끝 layer를 Shift-클릭하세요.',
+      connect: '연결',
+      arrowOn: (name) => `“${name}”의 화살표`,
+      arrowOnHint: '변경 사항은 바로 적용됩니다. 다른 layer를 Shift-클릭하면 새 화살표를 연결합니다.',
+      selected: (n) => `화살표 ${n}개 선택됨`, selectedHint: '아래 변경 사항은 바로 적용됩니다.',
+      swap: '⇄ 방향 바꾸기', detach: '분리',
+      styleEdit: '화살표 style', styleNew: '새 화살표', styleNewHint: '면은 자동으로 선택됩니다',
+    },
+    en: {
+      start: 'Start', end: 'End', color: 'Color', showLabel: 'Show label', labelPlaceholder: 'Label text',
+      refreshAll: 'Refresh all', liveTitle: 'While Live is on, arrows follow their layers',
+      live: (n) => `Live · ${n} arrow${n === 1 ? '' : 's'}`, paused: 'Paused',
+      side: { top: 'Top side', right: 'Right side', bottom: 'Bottom side', left: 'Left side' },
+      autoTitle: 'Pick the facing side automatically', auto: 'Auto', customColor: 'Custom color',
+      colors: { purple: 'Purple', blue: 'Blue', green: 'Green', orange: 'Orange', red: 'Red', pink: 'Pink', gray: 'Gray', black: 'Black' },
+      manyOnLayer: (n) => `${n} arrows on this layer`,
+      manyOnLayerHint: 'Select the arrow you want to edit, or Shift-click another layer to connect.',
+      selectTwo: 'Select two layers', selectTwoHint: 'Click the start layer, then Shift-click the end layer.',
+      connect: 'Connect',
+      arrowOn: (name) => `Arrow on “${name}”`,
+      arrowOnHint: 'Changes apply right away. Shift-click another layer to connect a new arrow.',
+      selected: (n) => `${n} arrow${n === 1 ? '' : 's'} selected`, selectedHint: 'Changes below apply right away.',
+      swap: '⇄ Swap direction', detach: 'Detach',
+      styleEdit: 'Arrow style', styleNew: 'New arrows', styleNewHint: 'sides are picked automatically',
+    },
+  }
+  let lang = 'ko'
+  const t = (k, ...a) => { const v = (I18N[lang] || I18N.ko)[k]; return typeof v === 'function' ? v(...a) : v }
+
+  // Static labels and titles; re-run whenever the language changes.
+  function applyLang() {
+    document.querySelectorAll('[data-i18n]').forEach((el) => (el.textContent = t(el.dataset.i18n)))
+    $('labelText').placeholder = t('labelPlaceholder')
+    $('live').title = t('liveTitle')
+    document.querySelectorAll('.picker .edge').forEach((b) => (b.title = t('side')[b.dataset.v]))
+    document.querySelectorAll('.picker .auto').forEach((b) => { b.title = t('autoTitle'); b.textContent = t('auto') })
+    document.querySelectorAll('.swatch[data-v]').forEach((b) => (b.title = t('colors')[b.dataset.name]))
+    document.querySelector('.custom').title = t('customColor')
+    const btn = (id, label) => `<button class="lang-btn${lang === id ? ' active' : ''}" data-lang="${id}">${label}</button>`
+    $('langToggle').innerHTML = btn('ko', '한국어') + btn('en', 'EN')
+    $('langToggle').querySelectorAll('[data-lang]').forEach((b) => (b.onclick = () => {
+      if (lang === b.dataset.lang) return
+      lang = b.dataset.lang
+      applyLang()
+      render()
+      send('lang', { lang })
+    }))
+  }
+  const ICON_SELECT = '<svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="9" width="8" height="10" rx="1.5"/><rect x="18" y="9" width="8" height="10" rx="1.5"/><path d="M10 14h7" stroke-dasharray="1.5 1.5"/><path d="M15 11.5l2.5 2.5-2.5 2.5"/></svg>'
+
+  let state = null
+  const $ = (id) => document.getElementById(id)
+  const send = (type, extra) => parent.postMessage({ pluginMessage: { type, ...extra } }, '*')
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+  const setStyle = (patch) => {
+    Object.assign(state.style, patch)
+    render()
+    send('style', { patch })
+  }
+
+  // Build side pickers
+  document.querySelectorAll('.picker').forEach((p) => {
+    p.innerHTML = '<div class="box"></div>' +
+      ['top', 'right', 'bottom', 'left'].map((v) => `<button class="edge" data-v="${v}"></button>`).join('') +
+      '<button class="auto" data-v="auto"></button>'
+    p.querySelectorAll('button').forEach((b) => (b.onclick = () => setStyle({ [p.dataset.key]: b.dataset.v })))
+  })
+
+  // Build swatches
+  $('swatches').innerHTML =
+    COLORS.map(([hex, name]) => `<button class="swatch" data-v="${hex}" data-name="${name}" style="background:${hex}"></button>`).join('') +
+    '<label class="swatch custom"><input type="color" id="customColor" /></label>'
+  document.querySelectorAll('.swatch[data-v]').forEach((b) => (b.onclick = () => setStyle({ color: b.dataset.v })))
+  $('customColor').oninput = (e) => setStyle({ color: e.target.value.toUpperCase() })
+
+  $('label').onchange = (e) => setStyle({ label: e.target.checked })
+  let textTimer
+  $('labelText').oninput = (e) => {
+    clearTimeout(textTimer)
+    textTimer = setTimeout(() => send('text', { text: e.target.value }), 200)
+  }
+  $('refresh').onclick = () => send('refresh')
+  $('live').onclick = () => send('live', { on: !state.live })
+
+  function renderCard() {
+    const card = $('card')
+    if (state.mode === 'idle' && state.attached > 1) {
+      card.innerHTML = `<div class="card-msg">${ICON_SELECT}<div><b>${t('manyOnLayer', state.attached)}</b><br><span class="muted">${t('manyOnLayerHint')}</span></div></div>`
+    } else if (state.mode === 'idle') {
+      card.innerHTML = `<div class="card-msg">${ICON_SELECT}<div><b>${t('selectTwo')}</b><br><span class="muted">${t('selectTwoHint')}</span></div></div>`
+    } else if (state.mode === 'ready') {
+      const [a, b] = state.layers
+      card.innerHTML = `<div class="pair"><span title="${esc(a)}">${esc(a)}</span>→<span title="${esc(b)}">${esc(b)}</span></div>
+        <button class="primary full" id="connect">${t('connect')}</button>`
+      $('connect').onclick = () => send('connect')
+    } else {
+      const n = state.arrows
+      const head = state.via
+        ? `<b>${t('arrowOn', esc(state.via))}</b><br><span class="muted">${t('arrowOnHint')}</span>`
+        : `<b>${t('selected', n)}</b><br><span class="muted">${t('selectedHint')}</span>`
+      card.innerHTML = `<div class="card-msg"><div>${head}</div></div>
+        <div class="btns"><button id="swap">${t('swap')}</button><button id="detach">${t('detach')}</button></div>`
+      $('swap').onclick = () => send('swap')
+      $('detach').onclick = () => send('detach')
+    }
+  }
+
+  function render() {
+    if (!state) return
+    const s = state.style
+    document.documentElement.style.setProperty('--accent', s.color)
+    renderCard()
+    const editing = state.mode === 'arrows'
+    $('styleTitle').textContent = editing ? t('styleEdit') : t('styleNew')
+    $('styleHint').textContent = editing ? '' : t('styleNewHint')
+    $('sidesRow').hidden = !editing
+    document.querySelectorAll('.picker').forEach((p) =>
+      p.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(s[p.dataset.key] === b.dataset.v))))
+    let preset = false
+    document.querySelectorAll('.swatch[data-v]').forEach((b) => {
+      const on = b.dataset.v.toUpperCase() === s.color.toUpperCase()
+      preset = preset || on
+      b.setAttribute('aria-pressed', String(on))
+    })
+    const custom = document.querySelector('.custom')
+    custom.setAttribute('aria-pressed', String(!preset))
+    if (!preset) custom.style.background = s.color
+    else custom.style.background = ''
+    $('label').checked = s.label
+    const input = $('labelText')
+    $('labelRow').hidden = !editing // labels are per-arrow; new arrows start without one
+    input.hidden = !(editing && s.label && state.arrows === 1)
+    if (document.activeElement !== input && s.text !== undefined) input.value = s.text
+    $('live').classList.toggle('off', !state.live)
+    fitHeight()
+    $('liveText').textContent = state.live ? t('live', state.count) : t('paused')
+  }
+
+  // Size the plugin window to the content.
+  let lastHeight = 0
+  function fitHeight() {
+    requestAnimationFrame(() => {
+      const h = Math.ceil(document.querySelector('footer').getBoundingClientRect().bottom)
+      if (h !== lastHeight) {
+        lastHeight = h
+        send('resize', { height: h })
+      }
+    })
+  }
+
+  onmessage = (e) => {
+    const msg = e.data.pluginMessage
+    if (msg && msg.type === 'state') {
+      state = msg
+      if (msg.lang && msg.lang !== lang) { lang = msg.lang; applyLang() }
+      render()
+    }
+  }
+  applyLang()
+</script>

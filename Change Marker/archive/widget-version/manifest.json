@@ -1,0 +1,13 @@
+{
+  "name": "Change Marker",
+  "id": "change-marker-dev",
+  "api": "1.0.0",
+  "widgetApi": "1.0.0",
+  "containsWidget": true,
+  "main": "code.js",
+  "ui": "ui.html",
+  "editorType": ["figma"],
+  "documentAccess": "dynamic-page",
+  "networkAccess": { "allowedDomains": ["none"] },
+  "permissions": ["currentuser"]
+}
