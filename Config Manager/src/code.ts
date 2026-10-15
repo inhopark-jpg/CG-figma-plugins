@@ -1301,6 +1301,7 @@ const FONT = {
 };
 const LABEL_W = 350;
 const COL_W = 280;
+const TABLE_W = 1500; // every table is exactly this wide: the label column keeps LABEL_W, the mode columns share the rest
 const LOCATION_LABEL_W = 120;
 const ROW_H = 44;
 const SHOW_LOCATION_PROP = 'Show location';
@@ -1604,15 +1605,24 @@ function textCell(tpl: ComponentNode, key: string, text: string, row: FrameNode 
   return inst;
 }
 
+/** Widths of `n` mode columns that together fill TABLE_W - LABEL_W exactly (the remainder pixels go to the first columns). */
+function colWidths(n: number): number[] {
+  const count = Math.max(1, n);
+  const total = TABLE_W - LABEL_W;
+  const base = Math.floor(total / count);
+  const extra = total - base * count;
+  return Array.from({ length: count }, (_, i) => base + (i < extra ? 1 : 0));
+}
+
 const valueKind = (type: VariableResolvedDataType): TplKey =>
   type === 'BOOLEAN' ? 'boolean' : type === 'COLOR' ? 'color' : type === 'FLOAT' ? 'number' : 'text';
 
 /** A value cell: the template for the variable's type, in the column's mode, bound to the variable. */
-function valueCell(tpls: Templates, keys: CellKeys, row: FrameNode, variable: Variable, collection: VariableCollection, modeId: string) {
+function valueCell(tpls: Templates, keys: CellKeys, row: FrameNode, variable: Variable, collection: VariableCollection, modeId: string, width: number) {
   const kind = valueKind(variable.resolvedType);
   const inst = tpls[kind].createInstance();
   row.appendChild(inst);
-  inst.resize(COL_W, inst.height);
+  inst.resize(width, inst.height);
   inst.setExplicitVariableModeForCollection(collection, modeId);
   const alias = figma.variables.createVariableAlias(variable);
   if (kind === 'text') inst.setProperties({ [keys.text]: alias });
@@ -1643,7 +1653,8 @@ function headerRow(tpls: Templates, keys: CellKeys, data: TableData) {
   const row = gridRow('header');
   row.setPluginData(PD_ROLE, 'header');
   textCell(tpls.header, keys.header, data.labelHeader, row, LABEL_W);
-  for (const m of data.modes) textCell(tpls.header, keys.header, m.name, row, COL_W);
+  const widths = colWidths(data.modes.length);
+  data.modes.forEach((m, i) => textCell(tpls.header, keys.header, m.name, row, widths[i]));
   return row;
 }
 
@@ -1651,17 +1662,18 @@ function dataRow(tpls: Templates, keys: CellKeys, r: TableRow, variable: Variabl
   const row = gridRow(`row/${r.label}`);
   row.setPluginData(PD_ROW, r.id);
   textCell(tpls.label, keys.label, r.label, row, LABEL_W);
-  for (const m of modes) {
-    if (variable) valueCell(tpls, keys, row, variable, collection, m.id);
-    else textCell(tpls.text, keys.text, '—', row, COL_W);
-  }
+  const widths = colWidths(modes.length);
+  modes.forEach((m, i) => {
+    if (variable) valueCell(tpls, keys, row, variable, collection, m.id, widths[i]);
+    else textCell(tpls.text, keys.text, '—', row, widths[i]);
+  });
   return row;
 }
 
 function emptyRow(tpls: Templates, keys: CellKeys, modes: ModeInfo[]) {
   const row = gridRow('empty');
   row.setPluginData(PD_ROLE, 'empty');
-  textCell(tpls.label, keys.label, 'No entries yet', row, LABEL_W + COL_W * Math.max(1, modes.length));
+  textCell(tpls.label, keys.label, 'No entries yet', row, TABLE_W);
   return row;
 }
 
@@ -1790,7 +1802,7 @@ async function ensureTableSkeleton(comp: ComponentNode, data: TableData, tpls: T
 }
 
 /** Bump when the table layout code changes so existing tables are rebuilt once. */
-const TABLE_RENDER_VERSION = 4;
+const TABLE_RENDER_VERSION = 6; // 5: tables are TABLE_W wide; 6: TABLE_W 1500
 
 /** Two fingerprints: `layout` (columns, templates) needs a full rebuild; `rows` only a row reconcile. Values are in neither. */
 function tableSigs(data: TableData) {

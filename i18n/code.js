@@ -1330,12 +1330,14 @@ var PD_TPL_ROW = "i18nTplRow";     // root: id of the i18n-row template
 var PD_TPL_SIG = "i18nTplSig";     // root: modes the template columns were built for
 var PD_TABLES = "i18nTables";      // root: JSON { tableInstanceId: { p: pageId, s: sourceId } }
 var PD_TABLE_SIG = "i18nSig";      // table instance: what its rows were built from
-var TABLE_RENDER_VERSION = 2;      // bump when row/column building changes (2: rows in i18n-rows, value property)
+var TABLE_RENDER_VERSION = 4;      // bump when row/column building changes (2: rows in i18n-rows, value property; 3: fixed table width; 4: 1500)
 var TABLE_GAP = 100;               // px between the source layer and its table
 var TPL_CACHE_MS = 10000;
 var LANG_COL_RE = /^language-\d+$/;
 var ROW_PROP_NAME = "value";       // TEXT property on i18n-row that every column's text shows
 var ROWS_FRAME_NAME = "i18n-rows"; // wrapper inside i18n-slot that holds the rows
+var TABLE_WIDTH = 1500;            // every table is exactly this wide; the columns share it equally
+var TABLE_MAX_COLUMNS = 3;         // tables show at most this many language columns (the first modes of the collection)
 var REBUILD_THRESHOLD = 100;       // more new rows than this: build a fresh wrapper off-canvas
 
 var GREY_STROKE = { r: 0.667, g: 0.667, b: 0.667 };
@@ -1658,25 +1660,49 @@ async function ensureRowProperty(row) {
   return key;
 }
 
-// Keep both templates' columns in step with the collection's modes.
+// Column widths that together make exactly TABLE_WIDTH (remainder pixels go to the first columns).
+function columnWidth(index, count) {
+  var base = Math.floor(TABLE_WIDTH / count);
+  return base + (index < TABLE_WIDTH - base * count ? 1 : 0);
+}
+
+// Fixed-width columns: resize each to its share, keeping its vertical sizing.
+function applyColumnWidths(cols) {
+  for (var i = 0; i < cols.length; i++) {
+    var c = cols[i];
+    var sv = c.layoutSizingVertical;
+    c.resize(columnWidth(i, cols.length), c.height);
+    try { c.layoutSizingHorizontal = "FIXED"; } catch (e) {}
+    try { c.layoutSizingVertical = sv; } catch (e) {}
+  }
+}
+
+// The modes a table shows as columns: the first TABLE_MAX_COLUMNS of the collection.
+function tableModes(ctx) { return ctx.modes.slice(0, TABLE_MAX_COLUMNS); }
+
+// Keep both templates' columns in step with the collection's modes
+// (at most TABLE_MAX_COLUMNS of them).
 async function syncTemplateColumns(tpls, ctx) {
-  var sig = JSON.stringify(ctx.modes.map(function(m) { return [m.modeId, m.name]; }));
+  var modes = tableModes(ctx);
+  var sig = JSON.stringify({ w: TABLE_WIDTH, m: modes.map(function(m) { return [m.modeId, m.name]; }) });
   var header = tableParts(tpls.table).header;
   var headCols = langCols(header), rowCols = langCols(tpls.row);
   if (figma.root.getPluginData(PD_TPL_SIG) === sig &&
-      headCols.length === ctx.modes.length && rowCols.length === ctx.modes.length) {
+      headCols.length === modes.length && rowCols.length === modes.length) {
     if (!tpls.propKey) tpls.propKey = await ensureRowProperty(tpls.row);
     return false;
   }
 
-  headCols = setColumnCount(header, ctx.modes.length);
+  headCols = setColumnCount(header, modes.length);
   for (var i = 0; i < headCols.length; i++) {
     var ht = firstText(headCols[i]);
-    if (ht && ht.characters !== ctx.modes[i].name) { await loadFontsOf(ht); ht.characters = ctx.modes[i].name; }
+    if (ht && ht.characters !== modes[i].name) { await loadFontsOf(ht); ht.characters = modes[i].name; }
   }
-  rowCols = setColumnCount(tpls.row, ctx.modes.length);
+  applyColumnWidths(headCols);
+  rowCols = setColumnCount(tpls.row, modes.length);
+  applyColumnWidths(rowCols);
   for (var j = 0; j < rowCols.length; j++) {
-    rowCols[j].setExplicitVariableModeForCollection(ctx.collection, ctx.modes[j].modeId);
+    rowCols[j].setExplicitVariableModeForCollection(ctx.collection, modes[j].modeId);
   }
   // A cloned column's text loses its property reference — re-attach it.
   tpls.propKey = await ensureRowProperty(tpls.row);
@@ -1771,7 +1797,7 @@ async function syncTable(inst, ctx, tpls, force) {
   var varIds = collectSourceVars(source, vars);
   var sig = hashString(JSON.stringify({
     v: TABLE_RENDER_VERSION, t: tpls.table.id, r: tpls.row.id,
-    m: ctx.modes.map(function(m) { return m.modeId; }), vars: varIds,
+    m: tableModes(ctx).map(function(m) { return m.modeId; }), vars: varIds,
   }));
   if (!force && inst.getPluginData(PD_TABLE_SIG) === sig) return { changed: false };
 

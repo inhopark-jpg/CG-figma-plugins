@@ -74,6 +74,8 @@
   상태는 `ok` / `missing`(저장된 적 있는데 삭제됨) / `none`(처음). 10초 캐시. 없으면 `buildTemplates`가 참조 디자인
   (Rider-App › Utility의 i18n-table/i18n-row)과 같은 스타일로 현재 페이지에 만든다.
 - **열**: `syncTemplateColumns`가 두 템플릿의 `language-N` 열 수를 모드 수에 맞춘다(마지막 열 복제, 왼쪽 테두리 0).
+  모드가 많아도 `TABLE_MAX_COLUMNS`(3)개까지만 — `tableModes(ctx)` = 컬렉션 순서의 앞 3개 모드.
+  너비는 `TABLE_WIDTH`(1500) 고정 — 각 열을 `columnWidth(i, n)`으로 균등 분할(남는 px는 앞 열). 서명(`i18nTplSig`)에 너비가 들어 있다.
   헤더 텍스트 = 모드 이름, row 템플릿의 각 열에 `setExplicitVariableModeForCollection(language, 모드)` —
   instance가 이 모드를 물려받아 열마다 해당 언어 값이 보인다. 메인 컴포넌트 수정이므로 모든 instance에 즉시 전파된다.
 - **행**: `syncTable` — 원본 레이어 하위의 TEXT/INSTANCE 중 **그 토큰의 key 레이어인 노드**(`keyNodeId` 일치, 컴포넌트 속성이면

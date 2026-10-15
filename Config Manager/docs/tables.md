@@ -32,6 +32,11 @@ id는 `figma.root` plugin data `cm-templates`에 저장하고, 못 찾으면 현
 - Boolean 템플릿을 고칠 때: `true` layer는 불투명 배경으로 `false` layer를 완전히 덮어야 한다 (변수는 반전할 수 없어 속성 하나로 겹쳐 표시).
 - 색상 칸은 견본만 보여 준다. hex 문자열은 색 변수에 연결할 수 없다.
 
+## 너비
+
+표는 mode 수와 관계없이 **1500px**(`TABLE_W`)다. label 열은 350px(`LABEL_W`), 나머지 1150px를 mode 열이 균등하게 나눈다
+(`colWidths`, 남는 px는 앞 열). mode가 많으면 열이 좁아진다. 렌더 버전 6부터 적용 — 기존 표는 첫 동기화 때 다시 그려진다.
+
 ## 표 component 구조
 
 ```
