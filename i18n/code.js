@@ -1959,7 +1959,7 @@ async function handleCreateTable() {
     inst.y = Math.round(source.y);
     created = true;
   }
-  inst.name = TPL_TABLE_NAME + " / " + source.name;
+  inst.name = TPL_TABLE_NAME;
   reg[inst.id] = { p: figma.currentPage.id, s: source.id };
   writeRegistry(reg);
   if (collectSourceVars(source, vars).length > 200) figma.notify(L("tableBuilding"));
