@@ -14,7 +14,7 @@
 ## 구조
 
 - `code.js` (main): 상단 `CFG` 설정, `figma.ui.onmessage`의 `switch(msg.type)`로 UI 요청 처리
-  (`ready`, `set-lang`, `set-prefs`, `nav-node`, `hover-*`, `export*`, `notify` …), `push()`가 state를 보낸다.
+  (`ready`, `set-lang`, `set-prefs`, `nav-node`, `hover-*`, `export*`, `tokens-*`, `notify` …), `push()`가 state를 보낸다.
   토스트 문자열은 `MSG` + `M(key)`.
 - `ui.html` (UI): 전역 상태 `S`, `render()`가 `innerHTML`로 다시 그림. `renderNavbar()`가 내비 바와
   헤더의 언어 토글(`#langtoggle`)을 그린다. 사전은 `T`/`L`/`V`, 조회는 `t()`/`lbl()`/`val()`.

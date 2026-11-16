@@ -29,6 +29,8 @@ var CFG = {
   MAX_ICONS: 500,
   MAX_SEGMENTS: 24,
   MAX_PATH: 8,
+  MAX_MODE_NODES: 2000,  // layers searched below the selection for set modes
+  MAX_MODE_ROWS: 20,
   FOCUS_MS: 280,         // camera glide duration when focusing a layer
   THUMB_PX: 144,         // exported thumbnail size; the UI scales it down, so
                          // changing the display size never re-exports
@@ -39,8 +41,14 @@ figma.showUI(__html__, { width: 460, height: 740, themeColors: true });
 var lang = "ko";
 // figma.notify strings — the UI has its own dictionaries (T / L / V in ui.html).
 var MSG = {
-  ko: { notFound: "Layer를 찾을 수 없습니다", cantExport: "이 layer는 내보낼 수 없습니다", exportFailed: "내보내기 실패: " },
-  en: { notFound: "Layer not found", cantExport: "This layer can't be exported", exportFailed: "Export failed: " },
+  ko: { notFound: "Layer를 찾을 수 없습니다", cantExport: "이 layer는 내보낼 수 없습니다", exportFailed: "내보내기 실패: ",
+    tokAliasMissing: function (path, mode, id) { return path + " (" + mode + "): 참조 대상 " + id + "이 내보낼 collection에 없습니다"; },
+    tokNotGradient: function (name) { return "Paint style \"" + name + "\"이 gradient가 아닙니다"; },
+    tokUnboundStop: function (name, pos) { return "Paint style \"" + name + "\"의 stop(position " + pos + ")이 변수에 연결되어 있지 않습니다"; } },
+  en: { notFound: "Layer not found", cantExport: "This layer can't be exported", exportFailed: "Export failed: ",
+    tokAliasMissing: function (path, mode, id) { return path + " (" + mode + "): alias target " + id + " is not in an exported collection"; },
+    tokNotGradient: function (name) { return "Paint style \"" + name + "\" is not a gradient"; },
+    tokUnboundStop: function (name, pos) { return "Paint style \"" + name + "\" has a stop (position " + pos + ") not bound to a variable"; } },
 };
 function M(k) { return (MSG[lang] || MSG.ko)[k]; }
 var prefs = null;      // panel preferences (pane heights, thumbnail settings)
@@ -151,6 +159,15 @@ figma.ui.onmessage = async function (msg) {
       figma.clientStorage.setAsync("prefs", prefs);
       break;
     case "thumb": await thumbFor(msg.nodeId, msg.fromId); break;
+    // Design tokens tab: works on the file's variables, not the selection.
+    case "tokens-list":
+      try { figma.ui.postMessage(await tokensList()); }
+      catch (e) { figma.ui.postMessage({ type: "tokens-error", problems: [String(e && e.message || e)] }); }
+      break;
+    case "tokens-export":
+      try { figma.ui.postMessage(await tokensExport(msg.ids || [], !!msg.textStyles, !!msg.paintStyles, msg.modes)); }
+      catch (e) { figma.ui.postMessage({ type: "tokens-error", problems: [String(e && e.message || e)] }); }
+      break;
     case "notify":       figma.notify(String(msg.message || "")); break;
   }
 };
@@ -496,24 +513,63 @@ async function inspectNode(node) {
 /* ---------------- explicit variable modes ---------------- */
 /* resolvedVariableModes lists every collection's inherited mode, which is noise.
    explicitVariableModes only has entries where a designer deliberately picked a
-   mode on this layer — that's the thing worth surfacing to a dev. */
+   mode on a layer — that's the thing worth surfacing to a dev. A mode set on a
+   parent changes how this layer renders, and one set on a child changes part of
+   what's selected, so both are reported too, each with the layer that sets it.
+   rel: "self" | "parent" | "child". */
 
 async function modesSection(node) {
-  if (!has(node, "explicitVariableModes")) return null;
-  var evm = node.explicitVariableModes;
-  if (!evm) return null;
   var rows = [];
-  for (var cid in evm) {
-    var col = null;
-    try { col = await figma.variables.getVariableCollectionByIdAsync(cid); } catch (e) {}
-    if (!col) continue;
-    var modeName = evm[cid];
-    var modes = col.modes || [];
-    for (var i = 0; i < modes.length; i++) {
-      if (modes[i].modeId === evm[cid]) { modeName = modes[i].name; break; }
+  var cols = new Map();
+  async function colOf(cid) {
+    if (!cols.has(cid)) {
+      var c = null;
+      try { c = await figma.variables.getVariableCollectionByIdAsync(cid); } catch (e) {}
+      cols.set(cid, c);
     }
-    var isDefault = col.defaultModeId === evm[cid];
-    rows.push({ k: col.name, v: modeName, raw: true, flag: !isDefault });
+    return cols.get(cid);
+  }
+  async function add(n, rel, only) {
+    var evm = has(n, "explicitVariableModes") ? n.explicitVariableModes : null;
+    if (!evm) return;
+    for (var cid in evm) {
+      if (only && !only(cid)) continue;
+      var col = await colOf(cid);
+      if (!col) continue;
+      var modeName = evm[cid];
+      var modes = col.modes || [];
+      for (var i = 0; i < modes.length; i++) {
+        if (modes[i].modeId === evm[cid]) { modeName = modes[i].name; break; }
+      }
+      rows.push({ k: col.name, v: modeName, raw: true, flag: col.defaultModeId !== evm[cid],
+                  cid: cid, rel: rel, srcId: n.id, srcName: n.name });
+    }
+  }
+
+  await add(node, "self");
+
+  // Only the nearest parent setting a collection actually applies here; one
+  // further up is overridden by it (or by the layer itself).
+  var seen = {};
+  for (var r = 0; r < rows.length; r++) seen[rows[r].cid] = true;
+  var p = node.parent;
+  while (p && p.type !== "PAGE" && p.type !== "DOCUMENT") {
+    await add(p, "parent", function (cid) { if (seen[cid]) return false; seen[cid] = true; return true; });
+    p = p.parent;
+  }
+
+  // Children: bounded walk, so a huge frame can't stall the panel.
+  var stack = ("children" in node && node.children) ? node.children.slice().reverse() : [];
+  var visited = 0, found = 0;
+  while (stack.length && visited < CFG.MAX_MODE_NODES && found < CFG.MAX_MODE_ROWS) {
+    var c = stack.pop();
+    visited++;
+    var before = rows.length;
+    await add(c, "child");
+    found += rows.length - before;
+    if ("children" in c && c.children) {
+      for (var k = c.children.length - 1; k >= 0; k--) stack.push(c.children[k]);
+    }
   }
   return rows.length ? rows : null;
 }
@@ -2109,3 +2165,305 @@ async function exportWithSettings(id, cfg, runId) {
   figma.ui.postMessage(msg);
 }
 
+
+/* ---------------- design tokens (DTCG export) ---------------- */
+
+// Started as a port of rikaride-riderapp's tokens/extract/to-dtcg.mjs and keeps
+// its tree (collection > path > token, modes in $extensions), but is leaner on
+// purpose: no file header, ids or descriptions, a mode list only where there is
+// more than one mode, and every literal colour as hex + $alpha. So it is not a
+// drop-in for that project's design-tokens.json.
+
+// `a ?? b` — the script leans on it, and 0 / "" must survive where it does.
+function nn(a, b) { return a === null || a === undefined ? b : a; }
+
+function isAlias(v) { return !!(v && typeof v === "object" && v.type === "VARIABLE_ALIAS"); }
+
+// Every variable id a value points at: plain aliases, and colour + opacity
+// (the *-alpha primitives), whose colour half is an alias too.
+function aliasIds(v) {
+  var out = [];
+  var vals = v.valuesByMode || {};
+  for (var k in vals) {
+    var raw = vals[k];
+    if (isAlias(raw)) out.push(raw.id);
+    else if (raw && typeof raw === "object" && isAlias(raw.color)) out.push(raw.color.id);
+  }
+  return out;
+}
+
+function boundIds(style) {
+  var out = [];
+  var bv = style.boundVariables || {};
+  for (var k in bv) {
+    var b = Array.isArray(bv[k]) ? bv[k] : [bv[k]];
+    for (var i = 0; i < b.length; i++) if (b[i] && b[i].id) out.push(b[i].id);
+  }
+  return out;
+}
+
+// Collections in Figma's order, each with its variables in Figma's order —
+// the order the script writes them in.
+async function readTokenSource() {
+  var cols = await figma.variables.getLocalVariableCollectionsAsync();
+  var all = await figma.variables.getLocalVariablesAsync();
+  var byId = new Map();
+  for (var i = 0; i < all.length; i++) byId.set(all[i].id, all[i]);
+  var list = [];
+  for (var c = 0; c < cols.length; c++) {
+    var col = cols[c];
+    var vars = [];
+    for (var j = 0; j < col.variableIds.length; j++) {
+      var v = byId.get(col.variableIds[j]);
+      if (!v) { v = await figma.variables.getVariableByIdAsync(col.variableIds[j]); if (v) byId.set(v.id, v); }
+      if (v) vars.push(v);
+    }
+    list.push({ col: col, vars: vars });
+  }
+  var styles = await figma.getLocalTextStylesAsync();
+  var paints = await figma.getLocalPaintStylesAsync();
+  return { list: list, byId: byId, styles: styles, paints: paints };
+}
+
+function stopIds(style) {
+  var out = [];
+  var p = (style.paints || [])[0];
+  var stops = (p && p.gradientStops) || [];
+  for (var i = 0; i < stops.length; i++) {
+    var b = stops[i].boundVariables && stops[i].boundVariables.color;
+    if (b && b.id) out.push(b.id);
+  }
+  return out;
+}
+
+// What the tab lists. A collection with no variables is a divider in the
+// variables panel ("––––"), not a choice. deps are the other collections this
+// one points into; an alias that leaves the file (a library variable) or points
+// at a deleted one can't be written, so the collection is blocked.
+async function tokensList() {
+  var src = await readTokenSource();
+  var colOf = new Map(); // variable id -> local collection id
+  src.list.forEach(function (e) { e.vars.forEach(function (v) { colOf.set(v.id, e.col.id); }); });
+
+  function depsOf(ids, selfId) {
+    var deps = [], outside = 0;
+    for (var i = 0; i < ids.length; i++) {
+      var cid = colOf.get(ids[i]);
+      if (!cid) { outside++; continue; }
+      if (cid !== selfId && deps.indexOf(cid) < 0) deps.push(cid);
+    }
+    return { deps: deps, outside: outside };
+  }
+
+  var collections = [];
+  src.list.forEach(function (e) {
+    if (!e.vars.length) return;
+    var ids = [];
+    e.vars.forEach(function (v) { ids = ids.concat(aliasIds(v)); });
+    var d = depsOf(ids, e.col.id);
+    collections.push({
+      id: e.col.id, name: e.col.name, count: e.vars.length, modes: e.col.modes.length,
+      modeList: e.col.modes.map(function (m) { return { id: m.modeId, name: m.name }; }),
+      defaultModeId: e.col.defaultModeId,
+      deps: d.deps, outside: d.outside,
+    });
+  });
+
+  var sids = [];
+  src.styles.forEach(function (s) { sids = sids.concat(boundIds(s)); });
+  // A text style bound to a library variable just falls back to its literal
+  // value, as the script does — that blocks nothing.
+  var sd = depsOf(sids, null);
+  // A gradient stop that leaves the file, though, fails the export (it would
+  // stop following modes), so that one does block.
+  var pids = [];
+  src.paints.forEach(function (s) { pids = pids.concat(stopIds(s)); });
+  var pd = depsOf(pids, null);
+  return {
+    type: "tokens-list",
+    collections: collections,
+    textStyles: { count: src.styles.length, deps: sd.deps },
+    paintStyles: { count: src.paints.length, deps: pd.deps, outside: pd.outside },
+  };
+}
+
+// Figma's gradientTransform maps object space to gradient space and the
+// gradient runs along gradient-space +x, so the inverse of the 2x2 part applied
+// to [1,0] is its direction on the object. CSS puts 0deg at the top, clockwise,
+// and Figma's y grows downwards: hence atan2(dx, -dy).
+function gradientAngle(t) {
+  if (!t || !t[0] || !t[1]) return null;
+  var a = t[0][0], b = t[0][1], c = t[1][0], d = t[1][1];
+  var det = a * d - b * c;
+  if (!det) return null;
+  var dx = d / det;
+  var dy = -c / det;
+  var deg = (Math.atan2(dx, -dy) * 180) / Math.PI;
+  return Math.round(deg * 10) / 10;
+}
+
+var hex2 = function (n) { var s = Math.round(n * 255).toString(16); return s.length < 2 ? "0" + s : s; };
+
+// A literal colour as written in the json: always hex, opacity apart.
+function tokColor(c) {
+  return { $value: "#" + hex2(c.r) + hex2(c.g) + hex2(c.b), $alpha: Number(nn(c.a, 1).toFixed(4)) };
+}
+
+function dtcgType(head, resolvedType) {
+  if (resolvedType === "COLOR") return "color";
+  if (resolvedType === "STRING") return head === "font-family" ? "fontFamily" : "string";
+  if (resolvedType === "BOOLEAN") return "boolean";
+  if (head === "font-weight") return "number";
+  return "dimension";
+}
+
+// modes: collection id -> the mode ids to write. A collection missing from it
+// writes all its modes; the default mode is always written, since $value is it.
+async function tokensExport(ids, withStyles, withPaints, modes) {
+  modes = modes || {};
+  var src = await readTokenSource();
+  var problems = [];
+  var picked = src.list.filter(function (e) { return e.vars.length && ids.indexOf(e.col.id) >= 0; });
+
+  var idToPath = new Map(), idToVar = new Map();
+  picked.forEach(function (e) {
+    e.vars.forEach(function (v) {
+      idToPath.set(v.id, [e.col.name].concat(v.name.split("/")).join("."));
+      idToVar.set(v.id, v);
+    });
+  });
+
+  var out = {};
+  var perCollection = {}, leafCount = 0;
+
+  picked.forEach(function (e) {
+    var c = e.col;
+    var keep = modes[c.id];
+    var defaultId = nn(c.defaultModeId, c.modes[0] && c.modes[0].modeId);
+    var kept = c.modes.filter(function (m) { return !keep || m.modeId === defaultId || keep.indexOf(m.modeId) >= 0; });
+    var modeName = new Map(kept.map(function (m) { return [m.modeId, m.name]; }));
+    var defaultMode = nn(modeName.get(defaultId), nn(kept[0] && kept[0].name, null));
+    // With one mode there is nothing to choose between, so no mode list.
+    var multi = kept.length > 1;
+    var node = {};
+    if (multi) {
+      node.$extensions = {
+        "com.figma.modes": kept.map(function (m) { return m.name; }),
+        "com.figma.defaultMode": defaultMode,
+      };
+    }
+
+    e.vars.forEach(function (v) {
+      var segs = v.name.split("/");
+      var type = dtcgType(segs[0], v.resolvedType);
+      var modeValues = {};
+      var vals = v.valuesByMode || {};
+      for (var modeId in vals) {
+        var raw = vals[modeId];
+        var mn = modeName.get(modeId);
+        if (!mn) continue;
+        if (isAlias(raw)) {
+          var target = idToPath.get(raw.id);
+          if (!target) {
+            problems.push(M("tokAliasMissing")(c.name + "/" + v.name, mn, raw.id));
+            continue;
+          }
+          modeValues[mn] = "{" + target + "}";
+        } else if (raw && typeof raw === "object" && isAlias(raw.color)) {
+          // colour + opacity: DTCG has no alias for it, so it's resolved against
+          // the single-mode primitive it points at.
+          var bv = idToVar.get(raw.color.id);
+          var base = bv ? bv.valuesByMode[Object.keys(bv.valuesByMode)[0]] : null;
+          if (!base || typeof base !== "object" || !("r" in base)) {
+            problems.push(M("tokAliasMissing")(c.name + "/" + v.name, mn, raw.color.id));
+            continue;
+          }
+          modeValues[mn] = tokColor({ r: base.r, g: base.g, b: base.b, a: nn(base.a, 1) * (raw.opacity / 100) });
+        } else if (raw && typeof raw === "object" && "r" in raw) {
+          modeValues[mn] = tokColor(raw);
+        } else {
+          modeValues[mn] = raw;
+        }
+      }
+
+      var cursor = node;
+      for (var s = 0; s < segs.length - 1; s++) cursor = cursor[segs[s]] = nn(cursor[segs[s]], {});
+      var first = Object.keys(modeValues)[0];
+      var def = nn(modeValues[defaultMode], nn(first === undefined ? undefined : modeValues[first], null));
+      // A literal colour spreads into $value + $alpha; a reference has no
+      // alpha of its own. Per mode it stays that pair, wrapped.
+      var leaf = { $type: type };
+      if (def && typeof def === "object") { leaf.$value = def.$value; leaf.$alpha = def.$alpha; }
+      else leaf.$value = def;
+      if (multi) leaf.$extensions = { "com.figma.modeValues": modeValues };
+      cursor[segs[segs.length - 1]] = leaf;
+      leafCount++;
+    });
+
+    out[c.name] = node;
+    perCollection[c.name] = e.vars.length;
+  });
+
+  if (withStyles) {
+    var styles = {};
+    src.styles.forEach(function (s) {
+      var bvars = s.boundVariables || {};
+      var ref = function (key) {
+        var b = bvars[key];
+        var id = Array.isArray(b) ? (b[0] && b[0].id) : (b && b.id);
+        var p = id ? idToPath.get(id) : null;
+        return p ? "{" + p + "}" : null;
+      };
+      var lh = s.lineHeight;
+      var ls = s.letterSpacing;
+      styles[s.name] = {
+        fontFamily: nn(ref("fontFamily"), nn(s.fontName && s.fontName.family, null)),
+        fontWeight: nn(ref("fontWeight"), nn(ref("fontStyle"), nn(s.fontName && s.fontName.style, null))),
+        fontSize: nn(ref("fontSize"), nn(s.fontSize, null)),
+        lineHeight: nn(ref("lineHeight"),
+          (lh && lh.unit === "PIXELS") ? lh.value : (lh && lh.unit === "PERCENT") ? lh.value + "%" : "normal"),
+        letterSpacing: (ls && ls.unit === "PERCENT")
+          ? (ls.value + "em").replace(/^([\d.-]+)em$/, function (_, n) { return Number(n) / 100 + "em"; })
+          : (ls && ls.value) ? ls.value + "px" : "normal",
+      };
+    });
+    out.$textStyles = styles;
+  }
+
+  // Gradients only — the one token resource here that isn't a variable. A
+  // solid style, or a stop not bound to a variable (it wouldn't follow modes),
+  // is reported rather than written.
+  if (withPaints) {
+    var gradients = {};
+    src.paints.forEach(function (s) {
+      var p = (s.paints || [])[0];
+      if (!p || String(p.type).indexOf("GRADIENT") !== 0) {
+        problems.push(M("tokNotGradient")(s.name));
+        return;
+      }
+      var stops = (p.gradientStops || []).map(function (st) {
+        var id = st.boundVariables && st.boundVariables.color && st.boundVariables.color.id;
+        var path = id ? idToPath.get(id) : null;
+        if (!path) problems.push(M("tokUnboundStop")(s.name, st.position));
+        return { position: st.position, color: path ? "{" + path + "}" : null };
+      });
+      gradients[s.name] = {
+        type: p.type === "GRADIENT_LINEAR" ? "linear" : p.type.replace("GRADIENT_", "").toLowerCase(),
+        angle: gradientAngle(p.gradientTransform),
+        stops: stops,
+      };
+    });
+    out.$paintStyles = gradients;
+  }
+
+  if (problems.length) return { type: "tokens-error", problems: problems };
+  return {
+    type: "tokens-json",
+    // An opaque colour reads 1.0, not 1, so it's plain that it is an opacity.
+    text: JSON.stringify(out, null, 2).replace(/("\$alpha": -?\d+)(?=,|\n)/g, "$1.0") + "\n",
+    counts: perCollection,
+    leaves: leafCount,
+    textStyles: out.$textStyles ? Object.keys(out.$textStyles).length : 0,
+    paintStyles: out.$paintStyles ? Object.keys(out.$paintStyles).length : 0,
+  };
+}

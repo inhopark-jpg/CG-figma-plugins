@@ -25,7 +25,7 @@ Dev Mode와 일반 에디터 양쪽에서 실행된다 (`editorType: ["dev", "fi
 | 위치 | X/Y + 부모 각 변까지의 거리 |
 | 절대 위치 layer가 "Fixed"로 보임 | 제약(constraints: `Left and right`, `Scale` …)으로 크기 동작을 읽음 |
 | 스트로크가 평평한 목록 | 에디터처럼 layer 속성 → **Fill** → **Stroke**(위치·두께·변별 두께·대시·끝 모양) |
-| 명시적 변수 mode가 안 보임 | 디자이너가 직접 지정한 mode(`explicitVariableModes`)만 표시 |
+| 명시적 변수 mode가 안 보임 | 디자이너가 직접 지정한 mode(`explicitVariableModes`)를 **속성 탭의 첫 section**에 표시. 선택한 layer뿐 아니라 가장 가까운 부모·하위 layer에 지정된 mode도 보여 주고, **Layer로 이동** 버튼으로 그 layer를 선택한다 |
 | Code 뷰 | 제거됨 |
 
 모든 값과 token 이름은 클릭하면 복사된다. token 이름 표시 형식(`group.sub.token` / `group/sub/token`)을 고를 수 있다.
@@ -40,13 +40,29 @@ Dev Mode와 일반 에디터 양쪽에서 실행된다 (`editorType: ["dev", "fi
   - 더블클릭 또는 캐럿으로 펼치기/접기, hover 시 **Go to Main Component**.
 - **탭** (선택이 바뀌어도 현재 탭 유지, 탭마다 빈 상태 표시):
   - **정보** — 이름, 배지, 설명, component 속성(View all), Go to Main Component
-  - **속성** — 스크롤 동작 → layout → 타이포 → 콘텐츠 → 외형 → 선택 영역 색상 → effect → layout grid → mode
+  - **속성** — token 형식 → 변수 mode → 스크롤 동작 → layout → 타이포 → 콘텐츠 → 외형 → 선택 영역 색상 → effect → layout grid
   - **언어** — 번역 표 (열 너비 드래그 조절)
   - **아이콘** — 아이콘 내보내기 카드
   - **내보내기** — Figma Export 패널의 복제: 배율/형식 행, 접미사, 색 프로필, 이미지 resampling(기본 Basic),
     겹친 layer 무시, 미리보기. layer의 기존 `exportSettings`로 시작.
     - **Restore stroke widths**(SVG 기본 on): 그룹 내보내기 시 Figma가 stroke-width를 빠뜨리는 버그를 보정
     - **Add fill / stroke class**(기본 on): 분리된 path에 `class="fill"` / `class="stroke"` 부여
+  - **디자인 토큰** — 선택과 무관하게 파일의 로컬 변수를 DTCG `design-tokens.json`으로 내보낸다.
+    트리는 rikaride-riderapp의 `tokens/extract/to-dtcg.mjs`와 같지만 더 간결하다 (그 프로젝트 json을 대신하지 못함):
+    파일 머리(`$description`·`$generatedAt`), `com.figma.variableId`, token 설명이 없고, mode 목록
+    (`com.figma.modes`·`defaultMode`·`modeValues`)은 내보내는 mode가 2개 이상일 때만 쓴다.
+    리터럴 색은 `$value`에 hex, `$alpha`에 불투명도(불투명이면 `1.0`). 참조(`{a.b}`)에는 `$alpha`가 없다.
+    - 변수가 있는 collection만 체크 목록에 나온다 (변수 0개인 칸막이 collection은 표시하지 않음).
+    - 체크된 collection이 참조하는 collection은 잠겨서 뺄 수 없다 (참조를 끝까지 따라감, `참조: …` 배지).
+      체크하면 그 아래 사슬이 함께 체크된다. **Text style**·**Paint style**(gradient) 행도 같은 규칙이고,
+      쓰는 collection을 `사용: …` 배지로 보여 준다.
+    - 맨 위 **Collection 전체**는 내보낼 수 있는 collection을 모두 체크/해제한다 (style 행은 제외,
+      해제해도 체크된 항목이 참조하는 collection은 남음).
+    - mode가 여러 개인 collection은 체크하면 바로 아래 한 줄에 mode 칩이 나온다 (켜짐/꺼짐 토글, 줄바꿈).
+      기본 mode 칩은 `$value`라 잠겨 있다. 끝의 **전체 / 기본만** 버튼으로 나머지 mode를 한 번에 켜고 끈다.
+    - 파일 밖(라이브러리·삭제된 변수)을 참조하는 collection과 그것에 기대는 collection은 내보낼 수 없다.
+    - 처음엔 `ui.html`의 `TOK_DEFAULT`(rikaride의 token collection 8개와 두 style)만 체크된다.
+      선택은 collection 이름 기준, mode 선택은 collection·mode 이름 기준으로 저장된다.
 
 ## 내비게이션 동작
 

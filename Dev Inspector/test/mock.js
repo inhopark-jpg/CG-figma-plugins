@@ -81,6 +81,7 @@ const label2 = mk({
 
 const inner = mk({
   type: "INSTANCE", name: "Button/Primary", width: 120, height: 40,
+  explicitVariableModes: { "VC:1": "M:1" },
   scrollBehavior: "STICKY_SCROLLS",
   layoutMode: "HORIZONTAL", layoutWrap: "NO_WRAP", itemSpacing: 8,
   primaryAxisAlignItems: "CENTER", counterAxisAlignItems: "CENTER",

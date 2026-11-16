@@ -50,7 +50,24 @@ SVG 기본값 1이 된다. 플러그인은 `SVG_STRING`으로 내보낸 뒤 `id`
 실제 두께와 불투명도를 다시 써 넣는다. layer id는 바꾸지 않고, fill·stroke를 모두 가진 단일 vector에는
 `class="fill stroke"`를 붙여 `.stroke` 선택자가 계속 동작하게 한다.
 
+## 디자인 토큰 내보내기
+
+- `code.js`의 `tokensExport`는 rikaride-riderapp `tokens/extract/to-dtcg.mjs`의 이식에서 출발했지만 2026-11-03에
+  일부러 갈라졌다 (요청: 메타 필드 제거, hex + `$alpha`, mode 선택). 그 프로젝트의 `build-theme.mjs`는
+  `com.figma.modes`와 `rgb()` 색 문자열에 기대므로, 이 출력으로 그쪽 `design-tokens.json`을 바꿔치기할 수 없다.
+  그쪽은 계속 `to-dtcg.mjs`로 만든다. 트리 모양·alias 경로·style 변환은 여전히 같다.
+- mode: 기본 mode는 항상 쓴다 (`$value`가 그것). 남은 mode가 하나면 mode 목록과 `modeValues`를 쓰지 않는다.
+  mode별 리터럴 색은 `{"$value", "$alpha"}` 쌍으로, 참조는 문자열 그대로.
+- `$alpha`의 `1.0`·`0.0`은 `JSON.stringify` 뒤 정규식으로 붙인다 (숫자 값은 같고 표기만 다름).
+- `test/tokenexporttest.js`는 규칙을 작은 fixture로 고정한다.
+- 의존 관계: 일반 alias와 색+불투명도 alias(`*-alpha`) 모두 참조로 센다. Text style은 바인딩 전체, Paint style은
+  stop의 색 바인딩. Text style의 파일 밖 바인딩은 스크립트처럼 리터럴로 떨어지므로 막지 않지만, Paint style의
+  파일 밖 stop은 스크립트가 실패시키므로 막는다.
+- 변수는 탭에 들어올 때·↻·다시 읽기 때 다시 읽는다. 변수 변경에는 이벤트가 없어서다.
+
 ## 다국어
 
 UI 사전 3종: `T`(일반 문구), `L`(속성 label), `V`(값 번역, 한국어만). main의 토스트는 `code.js`의 `MSG`.
 테스트(`test/harness.js`)는 영어 문구를 검증하므로 state에 `lang: "en"`을 넣어 실행한다.
+- 변수 mode 표시: 부모는 collection마다 가장 가까운 것만 (더 위의 것은 가려지므로). 하위 layer는
+  `CFG.MAX_MODE_NODES`(2000)개까지만 훑고 `MAX_MODE_ROWS`(20)개에서 멈춘다. PAGE에 지정된 mode는 표시하지 않는다.
