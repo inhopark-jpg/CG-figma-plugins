@@ -78,8 +78,9 @@
   너비는 `TABLE_WIDTH`(1500) 고정 — 각 열을 `columnWidth(i, n)`으로 균등 분할(남는 px는 앞 열). 서명(`i18nTplSig`)에 너비가 들어 있다.
   헤더 텍스트 = 모드 이름, row 템플릿의 각 열에 `setExplicitVariableModeForCollection(language, 모드)` —
   instance가 이 모드를 물려받아 열마다 해당 언어 값이 보인다. 메인 컴포넌트 수정이므로 모든 instance에 즉시 전파된다.
-- **행**: `syncTable` — 원본 레이어 하위의 TEXT/INSTANCE 중 **그 토큰의 key 레이어인 노드**(`keyNodeId` 일치, 컴포넌트 속성이면
-  instance id 일치)의 토큰만 문서 순서·중복 없이 모은다(`collectSourceVars`). key 레이어가 바뀌면 다음 동기화에서 행이 따라간다.
+- **행**: `syncTable` — 원본 레이어 하위(자기 자신 포함) TEXT/INSTANCE가 쓰는 language 토큰을 문서 순서·중복 없이 모은다
+  (`collectSourceVars`). **key 레이어 위치는 보지 않는다** — 사용만 해도 행이 생긴다. `insideTable`로 `i18n-table`/`i18n-row`
+  하위 노드만 제외한다(행은 복사본). 사용처가 바뀌면 서명이 달라져 다음 동기화에서 행이 따라간다.
   서명 해시(`버전·템플릿 id·모드 id·변수 id`)가 같으면 아무것도 하지 않는다. 다르면 `i18n-rows` 안의 기존 행 중 유지할 것(`value` 속성의
   변수가 아직 원본에 있음)은 남기고 순서를 맞추며, 없는 행만 만들고 나머지는 지운다. 새 행이 100개를 넘거나 `i18n-rows`가 없으면
   `buildRowsFrame`으로 새 프레임을 통째로 만들어 교체한다.

@@ -89,8 +89,8 @@ function isMissingValue(val) {
 // ---------------------------------------------------------------------------
 var STRINGS = {
   en: {
-    tableNotTopLevel: "Select one layer that sits directly on the page or in a section.",
-    tableNoVars: "No token in this layer has its key layer here.",
+    tableSelectOne: "Select one layer.",
+    tableNoVars: "No language token is used in this layer.",
     tplMissing: "The table template components were deleted. Restore them first.",
     tplCreated: "Created the i18n-table and i18n-row templates and the table.",
     tableCreated: function (n) { return "Created a translation table (" + n + " row" + (n === 1 ? "" : "s") + ")."; },
@@ -140,8 +140,8 @@ var STRINGS = {
     },
   },
   ko: {
-    tableNotTopLevel: "페이지나 섹션 바로 아래에 있는 레이어 하나를 선택하세요.",
-    tableNoVars: "해당 레이어 안에 key 레이어가 있는 토큰이 없습니다.",
+    tableSelectOne: "레이어 하나를 선택하세요.",
+    tableNoVars: "해당 레이어에서 사용하는 language 토큰이 없습니다.",
     tplMissing: "테이블 템플릿 컴포넌트가 삭제되었습니다. 먼저 템플릿을 복구하세요.",
     tplCreated: "i18n-table, i18n-row 템플릿과 테이블을 만들었습니다.",
     tableCreated: function (n) { return "번역 테이블을 만들었습니다 (" + n + "행)."; },
@@ -455,6 +455,14 @@ async function pushState() {
     else if (binding.kind === "property") nodeText = String(binding.instance.componentProperties[binding.propName].value || "");
   } catch (e) { nodeText = ""; }
 
+  // An instance (e.g. a card with a text property) can also be a table source —
+  // the edit view shows a table panel for it.
+  var nodeTable = null;
+  if (node.type === "INSTANCE") {
+    try { nodeTable = await tableInfoFor(node, ctx); } catch (e) { nodeTable = null; }
+    if (nodeTable && nodeTable.kind !== "source") nodeTable = null;
+  }
+
   figma.ui.postMessage(Object.assign({ type: "state", selection: "node" }, common, {
     nodeText: nodeText,
     bindingKind: binding.kind,
@@ -468,6 +476,7 @@ async function pushState() {
     recentIds: recentIds,
     nodeId: node.id,
     nodeName: node.name,
+    table: nodeTable,
   }));
 }
 
@@ -489,7 +498,10 @@ async function handleSave(values, description) {
   if (!variable) return notify(L("varGone"));
 
   for (var modeId in values) {
-    variable.setValueForMode(modeId, values[modeId]);
+    // A cleared field means "untranslated" — store the placeholder, never "" or spaces.
+    var val = values[modeId];
+    if (val == null || !String(val).trim()) val = MISSING;
+    variable.setValueForMode(modeId, val);
   }
   if (typeof description === "string") {
     try { variable.description = description; } catch (e) {}
@@ -1355,11 +1367,11 @@ function pageOf(node) {
   return p;
 }
 
-// Directly under the page, or directly under a section (at any depth of sections).
-function isTopLevel(node) {
-  if (!node || node.type === "SECTION" || node.type === "PAGE") return false;
-  var p = node.parent;
-  return !!p && (p.type === "PAGE" || p.type === "SECTION");
+// Any layer on the canvas can be the source of a table — nested ones too —
+// except table/template parts themselves.
+function canHaveTable(node) {
+  if (!node || node.type === "PAGE" || node.type === "DOCUMENT" || !isOnCanvas(node)) return false;
+  return !insideTable(node, null);
 }
 
 function topLevelAncestor(node) {
@@ -1595,7 +1607,7 @@ async function buildTemplates(anchor) {
   slot.appendChild(row.createInstance()); // default content, replaced in each table
 
   // Park the templates to the right of everything on the page.
-  var right = 0, top = anchor ? anchor.y : 0;
+  var right = 0, top = anchor ? absY(anchor) : 0;
   var kids = figma.currentPage.children;
   for (var i = 0; i < kids.length; i++) {
     if (kids[i] === table || kids[i] === row) continue;
@@ -1710,9 +1722,11 @@ async function syncTemplateColumns(tpls, ctx) {
   return true;
 }
 
-// Tokens whose KEY layer is inside `source` (the source itself included), in
-// document order, without duplicates. Tokens merely used there — whose key
-// layer lives elsewhere — are left out: a table lists the tokens a screen owns.
+// Every language token used anywhere inside `source` (the source itself
+// included), in document order, without duplicates. The key layer does NOT have
+// to be inside the source — a screen that only reuses a token still gets a row
+// for it, so any layer can get a table.
+// Only table rows are skipped: they display tokens, they are not usages.
 function collectSourceVars(source, langIds) {
   figma.skipInvisibleInstanceChildren = true;
   var ids = [], seen = {};
@@ -1722,21 +1736,28 @@ function collectSourceVars(source, langIds) {
     var found = source.findAllWithCriteria({ types: ["TEXT", "INSTANCE"] });
     for (var k = 0; k < found.length; k++) nodes.push(found[k]);
   }
-  var keyOf = {}; // variableId -> recorded key node id (read once per token)
   for (var i = 0; i < nodes.length; i++) {
     var b = null;
     try { b = resolveBinding(nodes[i]); } catch (e) { b = null; }
     if (!b || !b.variableId || !langIds[b.variableId] || seen[b.variableId]) continue;
-    var vid = b.variableId;
-    if (keyOf[vid] === undefined) {
-      try { keyOf[vid] = langIds[vid].getPluginData("keyNodeId") || ""; } catch (e) { keyOf[vid] = ""; }
-    }
-    var isKey = keyOf[vid] === nodes[i].id || (b.instance && keyOf[vid] === b.instance.id);
-    if (!isKey) continue;
-    seen[vid] = true;
-    ids.push(vid);
+    if (insideTable(nodes[i], source)) continue;
+    seen[b.variableId] = true;
+    ids.push(b.variableId);
   }
   return ids;
+}
+
+// Is the node inside a translation table or a table template (searching up to
+// and including `source`)? Those rows are copies of tokens, not usages, so a
+// table parked inside a screen never feeds itself back into its own rows.
+function insideTable(node, source) {
+  var n = node;
+  while (n) {
+    if (n.name === TPL_TABLE_NAME || n.name === TPL_ROW_NAME) return true;
+    if (n === source) return false;
+    n = n.parent;
+  }
+  return false;
 }
 
 function langIdMap(ctx) {
@@ -1906,7 +1927,7 @@ async function syncCurrentPageTables(force, inner) {
   if (changed) writeRegistry(reg);
 }
 
-// Selection info for the UI: a table, or a top-level layer that can get one.
+// Selection info for the UI: a table, or a layer that can get one.
 async function tableInfoFor(node, ctx) {
   var reg = readRegistry();
   var tpls = await getTemplates(false);
@@ -1920,7 +1941,7 @@ async function tableInfoFor(node, ctx) {
       tplStatus: tpls.status,
     };
   }
-  if (!isTopLevel(node)) return null;
+  if (!canHaveTable(node)) return null;
   var tableId = tableIdForSource(reg, node.id);
   if (tableId) {
     var t = await figma.getNodeByIdAsync(tableId);
@@ -1934,7 +1955,7 @@ async function tableInfoFor(node, ctx) {
 
 async function handleCreateTable() {
   var sel = figma.currentPage.selection;
-  if (sel.length !== 1 || !isTopLevel(sel[0])) { notify(L("tableNotTopLevel")); return; }
+  if (sel.length !== 1 || !canHaveTable(sel[0])) { notify(L("tableSelectOne")); return; }
   var source = sel[0];
   var ctx = await getContext();
   if (!ctx.collection) { notify(L("noCollection")); return; }
@@ -1954,9 +1975,14 @@ async function handleCreateTable() {
   if (!inst || inst.type !== "INSTANCE" || !isOnCanvas(inst)) {
     if (existingId) delete reg[existingId];
     inst = tpls.table.createInstance();
-    source.parent.appendChild(inst);
-    inst.x = Math.round(source.x + source.width + TABLE_GAP);
-    inst.y = Math.round(source.y);
+    // A nested source would put the table inside its screen (maybe an auto
+    // layout frame) — it goes next to the top-level layer instead, at the
+    // source's height. Keeping tables top-level also keeps scanCurrentPage's
+    // topLevelAncestor exclusion working.
+    var host = topLevelAncestor(source);
+    host.parent.appendChild(inst);
+    inst.x = Math.round(host.x + host.width + TABLE_GAP);
+    inst.y = Math.round(host === source ? source.y : absY(source) - (host.parent.type === "PAGE" ? 0 : absY(host.parent)));
     created = true;
   }
   inst.name = TPL_TABLE_NAME;
@@ -1964,10 +1990,30 @@ async function handleCreateTable() {
   writeRegistry(reg);
   if (collectSourceVars(source, vars).length > 200) figma.notify(L("tableBuilding"));
   var res = await syncTable(inst, ctx, tpls, true);
+  if (created) avoidTableOverlap(inst, reg);
 
   figma.currentPage.selection = [inst];
   figma.viewport.scrollAndZoomIntoView([source, inst]);
   notify(createdTpl ? L("tplCreated") : created ? L("tableCreated")(res.rows || 0) : L("tableUpdated")(res.rows || 0));
+}
+
+function absY(node) { return node.absoluteTransform[1][2]; }
+
+// Several layers of one screen each get a table beside the same screen — push a
+// new table right until it clears the other tables there.
+function avoidTableOverlap(inst, reg) {
+  var sibs = inst.parent.children, others = [];
+  for (var i = 0; i < sibs.length; i++) if (sibs[i] !== inst && reg[sibs[i].id]) others.push(sibs[i]);
+  for (var guard = 0; guard < others.length; guard++) {
+    var hit = null;
+    for (var j = 0; j < others.length; j++) {
+      var o = others[j];
+      if (inst.x < o.x + o.width && o.x < inst.x + inst.width &&
+          inst.y < o.y + o.height && o.y < inst.y + inst.height) { hit = o; break; }
+    }
+    if (!hit) return;
+    inst.x = Math.round(hit.x + hit.width + TABLE_GAP);
+  }
 }
 
 async function handleUpdateTable(tableId) {

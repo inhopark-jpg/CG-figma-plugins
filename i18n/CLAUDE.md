@@ -32,8 +32,10 @@
 - 편집 화면(`renderEdit`): 값 편집 아래 패널 3개 — 토큰(교체) / Key 레이어(상태·이동·지정) / 연결(해제·삭제).
   아이콘은 `ICON` + `ico()` / `ibtn()`. key 레이어면 `토큰 삭제`(두 번 클릭), 아니면 `해당 레이어에서 연결 해제`.
   정리 보고서의 key 없는 토큰에는 `usageCount` 기반 배지, 사용 중인 토큰의 삭제는 두 번 클릭.
-- 토큰 없는 레이어: `renderPrimary`는 "연결된 토큰 없음" 안내 + `토큰 생성하기` 버튼만 보여 주고, 눌러야 `renderCreate`
-  (돌아가기는 `S.createOrigin`). 값은 `S.draft`(노드별)에 유지.
+- 토큰 없는 레이어: `renderPrimary`는 "연결된 토큰 없음" 안내 + `토큰 생성하기`/`기존 토큰 연결하기` 버튼만 보여 주고,
+  눌러야 `renderCreate`(돌아가기는 `S.createOrigin`). 값은 `S.draft`(노드별)에 유지.
+  `기존 토큰 연결하기`는 `listMode: "swap"` 목록(`!S.hasVar`이면 제목 `linkPick`) → 선택 시 `swap` 메시지로 바로 연결.
+  `handleSwap`은 연결된 변수가 없어도 `resolveBinding`만 되면 동작한다(끊긴 연결도 같은 경로로 다시 연결).
 - 토큰 정리는 **key 레이어를 자동 지정하지 않는다**(예전 backfill 제거 — 사용자 결정).
 - 보고서 항목 클릭 = "peek": `navigate-to-usage`(key 레이어 → 없으면 화면 중앙에서 가장 가까운 사용처 선택) →
   `navigate-usage-result` → 이어지는 state로 일반 편집 화면. `S.reportPeek` 동안 state를 받고 모든 화면 위에
@@ -53,6 +55,11 @@
   테이블 레지스트리 `i18nTables` = `{ 테이블 instance id: { p: 페이지 id, s: 원본 레이어 id } }`. 테이블 instance에는 `i18nSig`.
 - 행은 `i18n-slot` > `i18n-rows` 프레임 안에 있고, row 템플릿의 TEXT 속성 `value`(모든 열 텍스트가 참조)에 변수를 연결한다.
   행 식별도 이 속성의 연결로 한다. 템플릿 구조는 이름으로 찾는다: 열 = `language-N` 프레임, 슬롯 = SLOT 노드.
+- 행 목록 `collectSourceVars`는 원본 레이어가 **사용하는** language 토큰 전부다. **key 레이어 조건 없음**(사용자 결정 —
+  어떤 레이어든 테이블을 만들 수 있어야 한다). `insideTable`로 `i18n-table`/`i18n-row` 하위만 뺀다(행은 복사본).
+- 원본 조건은 `canHaveTable`(캔버스 위 아무 레이어, 중첩·섹션 포함 — 최상위 조건 없음, 사용자 결정). 테이블 자체는 항상
+  `topLevelAncestor(원본)` 옆(같은 부모)에 둔다 — auto layout 안에 들어가지 않고, 정리 검사 제외가 유지된다. 겹치면 `avoidTableOverlap`.
+  텍스트 속성이 있는 instance는 `selection: "node"`로 가므로 state에 `table`을 함께 보내 편집 화면에 테이블 패널(`tablePanelHtml`)을 띄운다.
 - **성능 규칙 (1000개 변수로 측정)**: 슬롯에 행을 하나씩 넣지 말 것(행이 늘수록 느려짐) — 큰 묶음은 `buildRowsFrame`으로
   auto layout을 끈 채 만든 뒤 한 번에 넣는다. 루프 안에서 `node.children`을 반복해 읽지 말 것(매번 새 배열 → O(n²)).
   행별 `await`(getMainComponentAsync 등)는 명시적 업데이트에서만.

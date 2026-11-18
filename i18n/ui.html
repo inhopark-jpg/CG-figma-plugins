@@ -977,8 +977,8 @@ button.selected:disabled { opacity: 1; }
       multipleTitle: "Multiple layers selected",
       multipleBody: "Select only text layers or component instances to work with multiple at once.",
       tableTitle: "Translation table",
-      tableVarsFound: (n) => n + " token" + (n === 1 ? "" : "s") + " with their key layer in this layer",
-      tableNoVars: "No token has its key layer inside this layer, so there is nothing to put in a table. Tokens only used here (key layer elsewhere) are not listed.",
+      tableVarsFound: (n) => n + " token" + (n === 1 ? "" : "s") + " used in this layer",
+      tableNoVars: "No language token is used in this layer, so there is nothing to put in a table.",
       tableCreate: "Create translation table",
       tableUpdate: "Update table",
       tableGoTo: "Go to table",
@@ -1022,8 +1022,10 @@ button.selected:disabled { opacity: 1; }
           (p.regrouped ? " · " + p.regrouped + " regrouped" : "") + ".";
       },
       panelToken: "Token",
-      noVarLinkedHint: "This layer shows plain text. Create a token to make it translatable.",
+      noVarLinkedHint: "This layer shows plain text. Create a token, or link an existing one, to make it translatable.",
       createTokenBtn: "Create token",
+      linkExistingBtn: "Link an existing token",
+      linkPick: "Pick a token to link to this layer",
       backToReport: "Back to cleanup results",
       notUsedEditNote: "No layer in this file uses this token, so only its values and description can be edited here.",
       swapVarHint: "Link a different existing token to this layer.",
@@ -1111,8 +1113,8 @@ button.selected:disabled { opacity: 1; }
       multipleTitle: "여러 레이어가 선택됨",
       multipleBody: "텍스트 레이어 또는 컴포넌트 인스턴스만 선택하면 여러 개를 한 번에 작업할 수 있습니다.",
       tableTitle: "번역 테이블",
-      tableVarsFound: (n) => "해당 레이어 안에 key 레이어가 있는 토큰 " + n + "개",
-      tableNoVars: "해당 레이어 안에 key 레이어가 있는 토큰이 없어 테이블로 만들 내용이 없습니다. 여기서 사용만 하는 토큰(key 레이어가 다른 곳)은 포함되지 않습니다.",
+      tableVarsFound: (n) => "해당 레이어에서 사용하는 토큰 " + n + "개",
+      tableNoVars: "해당 레이어에서 사용하는 language 토큰이 없어 테이블로 만들 내용이 없습니다.",
       tableCreate: "번역 테이블 만들기",
       tableUpdate: "테이블 업데이트",
       tableGoTo: "테이블로 이동",
@@ -1156,8 +1158,10 @@ button.selected:disabled { opacity: 1; }
           (p.regrouped ? " · 그룹 변경 " + p.regrouped + "개" : "") + ".";
       },
       panelToken: "토큰",
-      noVarLinkedHint: "해당 레이어는 일반 텍스트입니다. 토큰을 만들면 번역할 수 있습니다.",
+      noVarLinkedHint: "해당 레이어는 일반 텍스트입니다. 토큰을 만들거나 기존 토큰을 연결하면 번역할 수 있습니다.",
       createTokenBtn: "토큰 생성하기",
+      linkExistingBtn: "기존 토큰 연결하기",
+      linkPick: "해당 레이어에 연결할 토큰 선택",
       backToReport: "정리 결과로 돌아가기",
       notUsedEditNote: "파일 전체에서 이 토큰을 사용하는 레이어가 없어, 여기서는 값과 설명만 편집할 수 있습니다.",
       swapVarHint: "해당 레이어에 다른 기존 토큰을 연결합니다.",
@@ -1461,7 +1465,7 @@ button.selected:disabled { opacity: 1; }
   }
 
   // ---- translation table ---------------------------------------------------
-  // A top-level layer ("table-source") can get a table; a selected table
+  // Any layer ("table-source") can get a table; a selected table
   // ("table-table") can be refreshed or traced back to its layer.
   function renderTable() {
     const tb = S.table || {};
@@ -1488,6 +1492,31 @@ button.selected:disabled { opacity: 1; }
       if (tb.varCount) html += '<div class="muted" style="margin-top:10px;font-size:11px;line-height:1.5">' + esc(t("tableHint")) + "</div>";
     }
     main.innerHTML = html;
+    bindTableButtons(tb);
+  }
+
+  // Table panel under the token editor, for an instance that has a text
+  // property (it opens the editor, but can still be a table source).
+  function tablePanelHtml() {
+    const tb = S.table;
+    if (!tb) return "";
+    let html = '<div class="panel">' +
+      '<div class="panel-head">' + ico("copy") + "<span>" + esc(t("tableTitle")) + "</span></div>";
+    if (tb.tplStatus === "missing") {
+      html += '<div class="notice err"><span>' + esc(t("tplMissing")) + "</span>" +
+        '<button id="tplRestore" class="xs">' + esc(t("tplRestore")) + "</button></div>";
+    }
+    html += '<div class="btns">' +
+      '<button id="tblCreate" class="full"' + (tb.varCount && tb.tplStatus !== "missing" ? "" : " disabled") + ">" +
+      esc(tb.tableId ? t("tableUpdate") : t("tableCreate")) + "</button>" +
+      (tb.tableId ? '<button id="tblGo" class="full">' + esc(t("tableGoTo")) + "</button>" : "") +
+      "</div>" +
+      '<div class="panel-note">' + esc(tb.varCount ? t("tableVarsFound")(tb.varCount) : t("tableNoVars")) + "</div>" +
+      "</div>";
+    return html;
+  }
+
+  function bindTableButtons(tb) {
     const on = (id, fn) => { const el = $(id); if (el) el.onclick = fn; };
     on("tplRestore", () => post({ type: "table-restore" }));
     on("tblCreate", () => post({ type: "table-create" }));
@@ -1526,9 +1555,15 @@ button.selected:disabled { opacity: 1; }
         esc(t("noVarLinkedHint")) + "</span></div>" +
         '<div class="muted" style="font-size:11px;margin:-2px 0 12px">' + esc(t("groupPrefix")) + esc(S.groupPath || t("pageRoot")) + "</div>";
     }
-    html += '<button id="startCreate" class="ibtn primary full">' + ico("plus") + "<span>" + esc(t("createTokenBtn")) + "</span></button>";
+    html += '<button id="startCreate" class="ibtn primary full">' + ico("plus") + "<span>" + esc(t("createTokenBtn")) + "</span></button>" +
+      // An unlinked layer can also take a token that already exists — the swap
+      // list binds it directly, so no throwaway token has to be created first.
+      '<button id="startLink" class="ibtn full ghost" style="margin-top:6px">' + ico("link") + "<span>" + esc(t("linkExistingBtn")) + "</span></button>";
+    html += tablePanelHtml();
     main.innerHTML = html;
+    if (S.table) bindTableButtons(S.table);
     $("startCreate").onclick = () => { S.createOrigin = "primary"; S.view = "create"; render(); };
+    $("startLink").onclick = () => { S.listMode = "swap"; S.view = "list"; S.search = ""; render(); };
   }
 
   // ---- edit view ----------------------------------------------------------
@@ -1627,20 +1662,24 @@ button.selected:disabled { opacity: 1; }
       "</div>" +
       '<div class="panel-note">' + esc(isKey ? t("deleteVarHint") : t("unlinkThisHint")) + "</div>" +
       "</div>";
+    html += tablePanelHtml();
 
     main.innerHTML = html;
+    if (S.table) bindTableButtons(S.table);
 
     const confirmBtn = $("confirm");
 
     const descBox = $("desc");
 
+    // A blank field is saved as "--", so clearing "--" is not a change.
+    const blankAsMissing = (x) => (x.trim() === "" ? "--" : x);
     // Enable confirm only when at least one editable field has changed.
     const checkChanged = () => {
       let changed = descBox.value !== originalDesc;
       const areas = main.querySelectorAll("textarea[data-mode]");
       for (let i = 0; i < areas.length && !changed; i++) {
         const t = areas[i];
-        if (!t.disabled && t.value !== (originals[t.getAttribute("data-mode")] || "")) {
+        if (!t.disabled && blankAsMissing(t.value) !== blankAsMissing(originals[t.getAttribute("data-mode")] || "")) {
           changed = true;
         }
       }
@@ -1808,7 +1847,9 @@ button.selected:disabled { opacity: 1; }
       '<div class="list-nav">' +
       '<button id="back" class="ghost sm">' + esc(t("back")) + '</button>' +
       "</div>" +
-      (S.listMode === "import" ? '<div class="view-title" style="margin-bottom:8px">' + esc(t("importPick")) + "</div>" : "") +
+      (S.listMode === "import"
+        ? '<div class="view-title" style="margin-bottom:8px">' + esc(t("importPick")) + "</div>"
+        : (!S.hasVar ? '<div class="view-title" style="margin-bottom:8px">' + esc(t("linkPick")) + "</div>" : "")) +
       '<div class="list-actions">' +
       '<input id="search" type="text" placeholder="' + esc(t("searchPlaceholder")) + '" value="' + esc(S.search) + '" />' +
       (S.listMode === "import" ? "" : '<button id="create" class="primary sm" style="white-space:nowrap">' + esc(t("newVariable")) + '</button>') +
