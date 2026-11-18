@@ -972,6 +972,8 @@ button.selected:disabled { opacity: 1; }
       cleanup: "Clean up tokens", currentPage: "this page",
       noCollectionTitle: 'No collection named "language"',
       noCollectionBody: 'Create a variable collection called "language" with string tokens to use this plugin.',
+      outdatedTitle: "Update the plugin",
+      outdatedBody: "This file was edited with a newer i18n plugin. Update this plugin to edit tokens and tables here — until then it stays read-only so it can't overwrite newer data.",
       nothingTitle: "Nothing selected",
       nothingBody: "Select a text layer to view or edit its language token.",
       multipleTitle: "Multiple layers selected",
@@ -1108,6 +1110,8 @@ button.selected:disabled { opacity: 1; }
       cleanup: "토큰 정리", currentPage: "현재 페이지",
       noCollectionTitle: '"language" 컬렉션이 없습니다',
       noCollectionBody: '이 플러그인을 사용하려면 문자열 토큰이 있는 "language" 컬렉션을 만드세요.',
+      outdatedTitle: "플러그인을 업데이트하세요",
+      outdatedBody: "이 파일은 더 새 버전의 i18n 플러그인으로 편집됐습니다. 토큰과 테이블을 수정하려면 플러그인을 업데이트하세요. 그전까지는 새 데이터를 덮어쓰지 않도록 읽기 전용으로 동작합니다.",
       nothingTitle: "선택된 항목 없음",
       nothingBody: "텍스트 레이어를 선택하여 language 토큰을 보거나 편집하세요.",
       multipleTitle: "여러 레이어가 선택됨",
@@ -1445,6 +1449,7 @@ button.selected:disabled { opacity: 1; }
   }
 
   function renderView() {
+    if (S.selection === "outdated") return renderMessage(t("outdatedTitle"), t("outdatedBody"));
     if (S.selection === "no-collection") return renderMessage(
       t("noCollectionTitle"), t("noCollectionBody")
     );

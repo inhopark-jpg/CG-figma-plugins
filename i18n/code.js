@@ -66,24 +66,43 @@ function stripWarn(leaf) {
 }
 
 // ---------------------------------------------------------------------------
-// Plugin data — stored as SHARED plugin data so any tool (another plugin, a
-// script run through the Figma API) can read and write the same records and
-// get the same result as this plugin. The contract is in docs/architecture.md
-// ("데이터 계약"). Older files keep the same keys in this plugin's private
-// plugin data: reads fall back to it, and writes go to both slots so an older
-// build of the plugin still sees current data.
+// Plugin data — ONE slot: shared plugin data, namespace PD_NS. Any tool (a
+// script through the Figma API, another plugin) reads and writes the same
+// records, so tokens and tables it makes are indistinguishable from the
+// plugin's own. Format: docs/data-contract.md. Files from before keep the
+// records in this plugin's private slot until migrateToShared copies them once;
+// only until then do reads fall back to it.
 // ---------------------------------------------------------------------------
 var PD_NS = "cg_i18n";
+var PD_MIGRATED = "sharedMigrated"; // root: "1" once the private slot was copied
+function legacyReadable() {
+  try { return figma.root.getSharedPluginData(PD_NS, PD_MIGRATED) !== "1"; } catch (e) { return false; }
+}
 function pdGet(obj, key) {
   var v = "";
   try { v = obj.getSharedPluginData(PD_NS, key); } catch (e) { v = ""; }
-  if (v) return v;
+  if (v || !legacyReadable()) return v;
   try { v = obj.getPluginData(key) || ""; } catch (e) { v = ""; }
   return v;
 }
 function pdSet(obj, key, value) {
-  try { obj.setSharedPluginData(PD_NS, key, value); } catch (e) {}
-  try { obj.setPluginData(key, value); } catch (e) {}
+  obj.setSharedPluginData(PD_NS, key, value);
+}
+
+// ---------------------------------------------------------------------------
+// Data contract version. Bump CONTRACT_VERSION whenever the stored format or
+// the naming rules (getGroupPath, genId, …) change — and update
+// docs/data-contract.md. The file remembers the highest version that has
+// touched it; a plugin older than that opens read-only and asks to be updated,
+// so an outdated copy on a teammate's machine can never rewrite newer data.
+// ---------------------------------------------------------------------------
+var CONTRACT_VERSION = 1;
+var PD_CONTRACT = "contractVersion"; // root
+var readOnly = false;
+function checkContract() {
+  var fileVer = parseInt(figma.root.getSharedPluginData(PD_NS, PD_CONTRACT) || "0", 10) || 0;
+  if (fileVer > CONTRACT_VERSION) { readOnly = true; return; }
+  if (fileVer < CONTRACT_VERSION) figma.root.setSharedPluginData(PD_NS, PD_CONTRACT, String(CONTRACT_VERSION));
 }
 
 var ID_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789";
@@ -143,6 +162,7 @@ var STRINGS = {
     deletedUnlinked: function (n) { return "Token deleted and unlinked from " + n + " layer" + (n === 1 ? "" : "s") + " on this page."; },
     relocated: "Key layer set.",
     pdMigrated: function (p) { return "Moved token data to shared storage: " + p.vars + " token(s), " + p.tables + " table(s)."; },
+    outdated: "This file was edited with a newer i18n plugin. Update the plugin to make changes.",
     couldNotAddMode: function (name, err) { return 'Could not add mode "' + name + '": ' + err; },
     errorPrefix: function (msg) { return "Error: " + msg; },
     cleanupSummary: function (p) {
@@ -195,6 +215,7 @@ var STRINGS = {
     deletedUnlinked: function (n) { return "토큰을 삭제하고 이 페이지의 레이어 " + n + "개에서 연결을 해제했습니다."; },
     relocated: "key 레이어가 지정되었습니다.",
     pdMigrated: function (p) { return "토큰 데이터를 공유 저장 칸으로 옮겼습니다: 토큰 " + p.vars + "개, 테이블 " + p.tables + "개."; },
+    outdated: "이 파일은 더 새 버전의 i18n 플러그인으로 편집됐습니다. 수정하려면 플러그인을 업데이트하세요.",
     couldNotAddMode: function (name, err) { return '"' + name + '" 모드를 추가할 수 없습니다: ' + err; },
     errorPrefix: function (msg) { return "오류: " + msg; },
     cleanupSummary: function (p) {
@@ -396,6 +417,13 @@ function applyBinding(binding, variable) {
 // ---------------------------------------------------------------------------
 async function pushState() {
   currentLang = await getLang();
+  if (readOnly) {
+    figma.ui.postMessage({
+      type: "state", selection: "outdated", lang: currentLang,
+      fileVersion: figma.root.getSharedPluginData(PD_NS, PD_CONTRACT), pluginVersion: CONTRACT_VERSION,
+    });
+    return;
+  }
   var ctx = await getContext();
   if (!ctx.collection) {
     figma.ui.postMessage({ type: "state", selection: "no-collection", lang: currentLang });
@@ -1417,11 +1445,24 @@ function topLevelAncestor(node) {
   return n;
 }
 
+// One root key per table — PD_TABLE_PREFIX + instance id → JSON { p, s } — so
+// two people creating tables at the same time never overwrite each other's
+// entries (a single JSON value would be last-write-wins).
+var PD_TABLE_PREFIX = "table:";
 function readRegistry() {
-  try { return JSON.parse(pdGet(figma.root, PD_TABLES) || "{}") || {}; }
-  catch (e) { return {}; }
+  var reg = {};
+  var keys = figma.root.getSharedPluginDataKeys(PD_NS);
+  for (var i = 0; i < keys.length; i++) {
+    if (keys[i].indexOf(PD_TABLE_PREFIX) !== 0) continue;
+    try {
+      var e = JSON.parse(figma.root.getSharedPluginData(PD_NS, keys[i]) || "null");
+      if (e) reg[keys[i].slice(PD_TABLE_PREFIX.length)] = e;
+    } catch (err) {}
+  }
+  return reg;
 }
-function writeRegistry(reg) { pdSet(figma.root, PD_TABLES, JSON.stringify(reg)); }
+function regPut(id, entry) { pdSet(figma.root, PD_TABLE_PREFIX + id, JSON.stringify(entry)); }
+function regDelete(id) { pdSet(figma.root, PD_TABLE_PREFIX + id, ""); }
 
 function tableIdForSource(reg, sourceId) {
   for (var id in reg) if (reg[id] && reg[id].s === sourceId) return id;
@@ -1953,6 +1994,7 @@ function withTableLock(fn) {
 }
 
 async function syncCurrentPageTables(force, inner) {
+  if (readOnly) return;
   if (!inner) {
     if (jobsPending) return; // something is running or waiting — skip this round
     return withTableLock(function() { return syncCurrentPageTables(force, true); });
@@ -1968,18 +2010,16 @@ async function syncCurrentPageTables(force, inner) {
   var tpls = await getTemplates(false);
   if (tpls.status !== "ok") return;
   await syncTemplateColumns(tpls, ctx);
-  var changed = false;
   for (var i = 0; i < ids.length; i++) {
     var inst = await figma.getNodeByIdAsync(ids[i]);
     if (!inst || inst.removed || inst.type !== "INSTANCE" || !isOnCanvas(inst)) {
-      delete reg[ids[i]]; changed = true; continue;
+      regDelete(ids[i]); continue;
     }
     var pg = pageOf(inst);
-    if (pg && pg.id !== pageId) { reg[ids[i]].p = pg.id; changed = true; continue; } // moved: synced on its page
+    if (pg && pg.id !== pageId) { regPut(ids[i], { p: pg.id, s: reg[ids[i]].s }); continue; } // moved: synced on its page
     try { await syncTable(inst, ctx, tpls, force); }
     catch (e) { console.error("[i18n] table sync failed", e); }
   }
-  if (changed) writeRegistry(reg);
 }
 
 // Selection info for the UI: a table, or a layer that can get one.
@@ -2028,7 +2068,7 @@ async function handleCreateTable() {
   var inst = existingId ? await figma.getNodeByIdAsync(existingId) : null;
   var created = false;
   if (!inst || inst.type !== "INSTANCE" || !isOnCanvas(inst)) {
-    if (existingId) delete reg[existingId];
+    if (existingId) { regDelete(existingId); delete reg[existingId]; }
     inst = tpls.table.createInstance();
     // A nested source would put the table inside its screen (maybe an auto
     // layout frame) — it goes next to the top-level layer instead, at the
@@ -2042,7 +2082,7 @@ async function handleCreateTable() {
   }
   inst.name = TPL_TABLE_NAME;
   reg[inst.id] = { p: figma.currentPage.id, s: source.id };
-  writeRegistry(reg);
+  regPut(inst.id, reg[inst.id]);
   if (collectSourceVars(source, vars).length > 200) figma.notify(L("tableBuilding"));
   var res = await syncTable(inst, ctx, tpls, true);
   if (created) avoidTableOverlap(inst, reg);
@@ -2114,8 +2154,10 @@ function notify(message) {
   figma.ui.postMessage({ type: "notify", message: message });
 }
 
+var READ_ONLY_OK = { ready: true, "set-lang": true, notify: true, refresh: true };
 figma.ui.onmessage = async function(msg) {
   try {
+    if (readOnly && !READ_ONLY_OK[msg.type]) { notify(L("outdated")); await pushState(); return; }
     if (msg.type === "ready")   { await pushState(); }
     else if (msg.type === "set-lang") {
       currentLang = msg.lang === "en" ? "en" : "ko";
@@ -2166,53 +2208,62 @@ figma.on("currentpagechange", function() {
 // Self-scheduling rather than setInterval, so a slow pass (huge tables, 1000s
 // of variables) never overlaps the next one, and the gap grows with the cost:
 // at least 2s, or 5x the last pass, capped at 30s.
-// One-time copy of the legacy private plugin data into the shared slot (see
-// pdGet/pdSet). Nothing is deleted. Variables: each key is copied only when the
-// shared slot is still empty. Table registry: entries are merged, so tables a
-// tool registered in the shared slot before this ran are kept too.
-var PD_MIGRATED = "sharedMigrated"; // root, shared slot only: "1" once copied
+// Startup: contract check, then the one-time move into the shared slot.
+// • Private → shared (files from before the shared slot): template ids and
+//   each variable's records, only where the shared slot is still empty.
+// • The old single-JSON table registry (private, or shared "i18nTables") is
+//   split into one key per table; entries already present are kept.
+// Nothing in the private slot is deleted.
+var PD_TABLES_LEGACY = PD_TABLES;
 async function migrateToShared() {
-  if (figma.root.getSharedPluginData(PD_NS, PD_MIGRATED) === "1") return;
-  var ROOT_KEYS = [PD_TPL_TABLE, PD_TPL_ROW, PD_TPL_SIG];
-  for (var rk = 0; rk < ROOT_KEYS.length; rk++) {
-    var legacy = figma.root.getPluginData(ROOT_KEYS[rk]);
-    if (legacy && !figma.root.getSharedPluginData(PD_NS, ROOT_KEYS[rk])) {
-      figma.root.setSharedPluginData(PD_NS, ROOT_KEYS[rk], legacy);
+  var vars = 0, tables = 0;
+  var legacy = legacyReadable();
+
+  if (legacy) {
+    var ROOT_KEYS = [PD_TPL_TABLE, PD_TPL_ROW, PD_TPL_SIG];
+    for (var rk = 0; rk < ROOT_KEYS.length; rk++) {
+      var old = figma.root.getPluginData(ROOT_KEYS[rk]);
+      if (old && !figma.root.getSharedPluginData(PD_NS, ROOT_KEYS[rk])) pdSet(figma.root, ROOT_KEYS[rk], old);
     }
-  }
-
-  var privReg = {}, sharedReg = {};
-  try { privReg = JSON.parse(figma.root.getPluginData(PD_TABLES) || "{}") || {}; } catch (e) { privReg = {}; }
-  try { sharedReg = JSON.parse(figma.root.getSharedPluginData(PD_NS, PD_TABLES) || "{}") || {}; } catch (e) { sharedReg = {}; }
-  var tables = 0;
-  for (var tid in privReg) {
-    if (!sharedReg[tid]) { sharedReg[tid] = privReg[tid]; tables++; }
-  }
-  pdSet(figma.root, PD_TABLES, JSON.stringify(sharedReg));
-
-  var vars = 0;
-  var ctx = await getContext();
-  if (ctx.collection) {
-    var VAR_KEYS = ["idAssigned", "keyNodeId", "keyPageId"];
-    for (var vi = 0; vi < ctx.stringVars.length; vi++) {
-      var v = ctx.stringVars[vi];
-      var copied = false;
-      for (var ki = 0; ki < VAR_KEYS.length; ki++) {
-        var val = "";
-        try { val = v.getPluginData(VAR_KEYS[ki]); } catch (e) { val = ""; }
-        if (val && !v.getSharedPluginData(PD_NS, VAR_KEYS[ki])) {
-          v.setSharedPluginData(PD_NS, VAR_KEYS[ki], val);
-          copied = true;
+    var ctx = await getContext();
+    if (ctx.collection) {
+      var VAR_KEYS = ["idAssigned", "keyNodeId", "keyPageId"];
+      for (var vi = 0; vi < ctx.stringVars.length; vi++) {
+        var v = ctx.stringVars[vi], copied = false;
+        for (var ki = 0; ki < VAR_KEYS.length; ki++) {
+          var val = "";
+          try { val = v.getPluginData(VAR_KEYS[ki]); } catch (e) { val = ""; }
+          if (val && !v.getSharedPluginData(PD_NS, VAR_KEYS[ki])) { pdSet(v, VAR_KEYS[ki], val); copied = true; }
         }
+        if (copied) vars++;
       }
-      if (copied) vars++;
     }
   }
 
-  figma.root.setSharedPluginData(PD_NS, PD_MIGRATED, "1");
+  var sources = [figma.root.getSharedPluginData(PD_NS, PD_TABLES_LEGACY)];
+  if (legacy) sources.push(figma.root.getPluginData(PD_TABLES_LEGACY));
+  var current = readRegistry();
+  for (var si = 0; si < sources.length; si++) {
+    var old = {};
+    try { old = JSON.parse(sources[si] || "{}") || {}; } catch (e) { old = {}; }
+    for (var tid in old) {
+      if (old[tid] && !current[tid]) { regPut(tid, old[tid]); current[tid] = old[tid]; tables++; }
+    }
+  }
+  if (figma.root.getSharedPluginData(PD_NS, PD_TABLES_LEGACY)) pdSet(figma.root, PD_TABLES_LEGACY, "");
+
+  if (legacy) pdSet(figma.root, PD_MIGRATED, "1");
   if (vars || tables) notify(L("pdMigrated")({ vars: vars, tables: tables }));
 }
-withTableLock(migrateToShared).catch(function(e) {
+
+// The contract check is synchronous and runs at load, before any UI message
+// can be handled — an outdated plugin never gets a chance to write.
+checkContract();
+async function startup() {
+  if (readOnly) { notify(L("outdated")); await pushState(); return; }
+  await migrateToShared();
+}
+withTableLock(startup).catch(function(e) {
   notify(L("errorPrefix")(e && e.message ? e.message : String(e)));
 });
 

@@ -52,7 +52,8 @@
 - 진입점: `handleCreateTable`, `handleUpdateTable`, `handleRestoreTemplates` (UI 메시지 `table-create` / `table-update` / `table-restore`),
   2초 폴링 `syncCurrentPageTables`, 선택 정보 `tableInfoFor` → state `table-source` / `table-table`.
 - 저장(shared plugin data `cg_i18n`, `figma.root` — `pdGet`/`pdSet`, [docs/data-contract.md](docs/data-contract.md)): 템플릿 id `i18nTplTable` / `i18nTplRow`, 템플릿 열 서명 `i18nTplSig`,
-  테이블 레지스트리 `i18nTables` = `{ 테이블 instance id: { p: 페이지 id, s: 원본 레이어 id } }`. 테이블 instance에는 `i18nSig`.
+  테이블 레지스트리 = 테이블마다 키 하나 `table:{instance id}` = `{ p: 페이지 id, s: 원본 레이어 id }` (`readRegistry` / `regPut` / `regDelete` —
+  동시 편집에서 서로 덮어쓰지 않게 하나의 JSON으로 합치지 말 것). 테이블 instance에는 `i18nSig`.
 - 행은 `i18n-slot` > `i18n-rows` 프레임 안에 있고, row 템플릿의 TEXT 속성 `value`(모든 열 텍스트가 참조)에 변수를 연결한다.
   행 식별도 이 속성의 연결로 한다. 템플릿 구조는 이름으로 찾는다: 열 = `language-N` 프레임, 슬롯 = SLOT 노드.
 - 행 목록 `collectSourceVars`는 원본 레이어가 **사용하는** language 토큰 전부다. **key 레이어 조건 없음**(사용자 결정 —
@@ -70,10 +71,13 @@
 
 ## plugin data — 외부 도구와 같은 칸
 
-- 모든 plugin data는 `pdGet`/`pdSet`으로만 읽고 쓴다. `getPluginData`/`setPluginData`를 직접 부르지 말 것 —
-  외부 도구(Claude `use_figma` 등)는 private 칸을 못 읽어서, 같은 결과를 만들 수 없게 된다.
-- 저장 형식과 외부 도구가 토큰·테이블을 만드는 절차는 [docs/data-contract.md](docs/data-contract.md). 키나 형식을 바꾸면 이 문서도 함께 고친다.
-- `migrateToShared`: 예전 private 데이터를 shared로 한 번 복사(삭제 없음, 레지스트리는 병합).
+- 모든 plugin data는 shared 칸(`cg_i18n`) 하나에만 둔다. `pdGet`/`pdSet`으로만 읽고 쓴다. `getPluginData`/`setPluginData`를
+  직접 부르지 말 것 — 외부 도구(Claude `use_figma` 등)는 private 칸을 못 읽어서, 같은 결과를 만들 수 없게 된다.
+- 저장 형식과 외부 도구가 토큰·테이블을 만드는 절차는 [docs/data-contract.md](docs/data-contract.md).
+- **`CONTRACT_VERSION`**: 저장 형식이나 이름 규칙(`getGroupPath`, `genId` 등)을 바꾸면 반드시 올리고 data-contract.md를 고친다.
+  `checkContract`가 로드 시 파일의 `contractVersion`과 비교해 — 낮으면 올리고, 파일이 더 높으면 `readOnly`로 업데이트 화면만 보여 준다
+  (`READ_ONLY_OK` 밖의 메시지와 테이블 폴링 차단). 형식과 무관한 수정(UI·버그)은 올리지 않는다 — 올리면 팀원 모두가 업데이트해야 한다.
+- `migrateToShared`: 예전 private 데이터를 shared로 한 번 복사하고(삭제 없음), 예전 단일 JSON 레지스트리(`i18nTables`)를 테이블별 키로 나눈다.
 
 ## QuickJS 제약 (code.js만)
 
