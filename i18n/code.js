@@ -65,7 +65,29 @@ function stripWarn(leaf) {
   return leaf.indexOf(WARN) === 0 ? leaf.replace(/^⚠️\s*/, "") : leaf;
 }
 
+// ---------------------------------------------------------------------------
+// Plugin data — stored as SHARED plugin data so any tool (another plugin, a
+// script run through the Figma API) can read and write the same records and
+// get the same result as this plugin. The contract is in docs/architecture.md
+// ("데이터 계약"). Older files keep the same keys in this plugin's private
+// plugin data: reads fall back to it, and writes go to both slots so an older
+// build of the plugin still sees current data.
+// ---------------------------------------------------------------------------
+var PD_NS = "cg_i18n";
+function pdGet(obj, key) {
+  var v = "";
+  try { v = obj.getSharedPluginData(PD_NS, key); } catch (e) { v = ""; }
+  if (v) return v;
+  try { v = obj.getPluginData(key) || ""; } catch (e) { v = ""; }
+  return v;
+}
+function pdSet(obj, key, value) {
+  try { obj.setSharedPluginData(PD_NS, key, value); } catch (e) {}
+  try { obj.setPluginData(key, value); } catch (e) {}
+}
+
 var ID_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789";
+var ID_RE = /^[a-z0-9]{6}$/;
 function genId(used) {
   var id;
   do {
@@ -120,6 +142,7 @@ var STRINGS = {
     searchingPages: "Not used on this page — searching the other pages…",
     deletedUnlinked: function (n) { return "Token deleted and unlinked from " + n + " layer" + (n === 1 ? "" : "s") + " on this page."; },
     relocated: "Key layer set.",
+    pdMigrated: function (p) { return "Moved token data to shared storage: " + p.vars + " token(s), " + p.tables + " table(s)."; },
     couldNotAddMode: function (name, err) { return 'Could not add mode "' + name + '": ' + err; },
     errorPrefix: function (msg) { return "Error: " + msg; },
     cleanupSummary: function (p) {
@@ -171,6 +194,7 @@ var STRINGS = {
     searchingPages: "이 페이지에서 사용되지 않아 다른 페이지에서 찾는 중…",
     deletedUnlinked: function (n) { return "토큰을 삭제하고 이 페이지의 레이어 " + n + "개에서 연결을 해제했습니다."; },
     relocated: "key 레이어가 지정되었습니다.",
+    pdMigrated: function (p) { return "토큰 데이터를 공유 저장 칸으로 옮겼습니다: 토큰 " + p.vars + "개, 테이블 " + p.tables + "개."; },
     couldNotAddMode: function (name, err) { return '"' + name + '" 모드를 추가할 수 없습니다: ' + err; },
     errorPrefix: function (msg) { return "오류: " + msg; },
     cleanupSummary: function (p) {
@@ -250,7 +274,7 @@ function serializeVar(v) {
   var desc = "";
   try { desc = v.description || ""; } catch (e) { desc = ""; }
   var keyNodeId = ""; // lets the home search jump to a token's key layer
-  try { keyNodeId = v.getPluginData("keyNodeId") || ""; } catch (e) { keyNodeId = ""; }
+  try { keyNodeId = pdGet(v, "keyNodeId") || ""; } catch (e) { keyNodeId = ""; }
   return {
     id: v.id, name: v.name, group: parts.group, leaf: parts.leaf,
     varId: stripWarn(parts.leaf), description: desc, valuesByMode: valuesByMode, keyNodeId: keyNodeId,
@@ -616,13 +640,13 @@ async function handleCreate(values) {
 
   applyBinding(binding, variable);
   // Mark as ID-assigned so cleanup keeps this leaf rather than re-generating.
-  try { variable.setPluginData("idAssigned", "1"); } catch (e) {}
+  try { pdSet(variable, "idAssigned", "1"); } catch (e) {}
   // Record this variable's "key" node and the page it lives on. Cleanup is
   // page-scoped: it follows the key on its home page and only flags it as
   // missing there, so a key moved to another page is re-detected when cleanup
   // runs on that page.
-  try { variable.setPluginData("keyNodeId", node.id); } catch (e) {}
-  try { variable.setPluginData("keyPageId", figma.currentPage.id); } catch (e) {}
+  try { pdSet(variable, "keyNodeId", node.id); } catch (e) {}
+  try { pdSet(variable, "keyPageId", figma.currentPage.id); } catch (e) {}
   await addRecentId(variable.id);
   notify(L("created"));
   await pushState();
@@ -746,13 +770,14 @@ async function handleCleanup() {
   var recordedGroupByVar = {};
   var keyNodeToVar = {};
   var keyPageById = {};
+  var hasKeyRecord = {};
   for (var q = 0; q < ctx.stringVars.length; q++) {
     var qv = ctx.stringVars[q];
     recordedGroupByVar[qv.id] = splitName(qv.name).group;
     var kn = "";
-    try { kn = qv.getPluginData("keyNodeId"); } catch (e) {}
-    if (kn) keyNodeToVar[kn] = qv.id;
-    try { keyPageById[qv.id] = qv.getPluginData("keyPageId"); } catch (e) { keyPageById[qv.id] = ""; }
+    try { kn = pdGet(qv, "keyNodeId"); } catch (e) {}
+    if (kn) { keyNodeToVar[kn] = qv.id; hasKeyRecord[qv.id] = true; }
+    try { keyPageById[qv.id] = pdGet(qv, "keyPageId"); } catch (e) { keyPageById[qv.id] = ""; }
   }
 
   var scanResult = await scanCurrentPage(ctx, allVarIds, keyNodeToVar, recordedGroupByVar);
@@ -768,7 +793,7 @@ async function handleCleanup() {
   for (var s2 = 0; s2 < ctx.stringVars.length; s2++) {
     var sv = ctx.stringVars[s2];
     var assigned = "";
-    try { assigned = sv.getPluginData("idAssigned"); } catch (e) {}
+    try { assigned = pdGet(sv, "idAssigned"); } catch (e) {}
     if (assigned === "1") usedIds[stripWarn(splitName(sv.name).leaf)] = true;
   }
 
@@ -796,27 +821,39 @@ async function handleCleanup() {
     //      flag it. The cleanup never picks a new key layer by itself — another
     //      layer using the token may not be the one the user wants; the report
     //      lists it so the user relocates (or deletes) deliberately.
-    //   3. Otherwise the key lives on another page (or was never set) → leave alone.
+    //   3. No key was ever recorded (made in Figma's variables panel, or by a
+    //      tool that skipped the data contract) but the token is used on this
+    //      page → flag it too, so it shows up instead of passing silently.
+    //   4. Otherwise the key lives on another page → leave alone.
     var keyMissing = false;
     var group = recordedGroup;
 
     if (keyFoundGroup[v.id] !== undefined) {
       group = keyFoundGroup[v.id];
-      try { v.setPluginData("keyPageId", currentPageId); } catch (e) {}
+      try { pdSet(v, "keyPageId", currentPageId); } catch (e) {}
     } else if (keyPageById[v.id] === currentPageId) {
+      keyMissing = true;
+    } else if (!hasKeyRecord[v.id] && usageByVar[v.id]) {
       keyMissing = true;
     }
 
     // ---- Resolve the ID (migrating old text-based leaves on first run) ----
+    // A leaf that is already a free 6-char ID is kept, so a token made outside
+    // the plugin never gets a new ID — the ID is the translation key in code.
     var idAssigned = "";
-    try { idAssigned = v.getPluginData("idAssigned"); } catch (e) {}
+    try { idAssigned = pdGet(v, "idAssigned"); } catch (e) {}
     var id;
     if (idAssigned === "1") {
       id = stripWarn(parts.leaf);
     } else {
-      id = genId(usedIds);
-      try { v.setPluginData("idAssigned", "1"); } catch (e) {}
-      migrated++;
+      var leafId = stripWarn(parts.leaf);
+      if (ID_RE.test(leafId) && !usedIds[leafId]) {
+        id = leafId;
+      } else {
+        id = genId(usedIds);
+        migrated++;
+      }
+      try { pdSet(v, "idAssigned", "1"); } catch (e) {}
     }
     usedIds[id] = true;
 
@@ -906,7 +943,7 @@ async function handleCleanup() {
 //   "none"      — never recorded
 async function keyLayerStatus(variable, selected, binding) {
   var keyNodeId = "";
-  try { keyNodeId = variable.getPluginData("keyNodeId") || ""; } catch (e) {}
+  try { keyNodeId = pdGet(variable, "keyNodeId") || ""; } catch (e) {}
   if (!keyNodeId) return { status: "none", keyNodeId: "" };
   if (selected && (selected.id === keyNodeId || (binding && binding.instance && binding.instance.id === keyNodeId))) {
     return { status: "current", keyNodeId: keyNodeId };
@@ -982,7 +1019,7 @@ async function selectTokenUsage(variableId) {
   var variable = null;
   for (var i = 0; i < all.length; i++) if (all[i].id === variableId) { variable = all[i]; break; }
   if (!variable) { notify(L("varNotFound")); return false; }
-  try { keyId = variable.getPluginData("keyNodeId") || ""; } catch (e) {}
+  try { keyId = pdGet(variable, "keyNodeId") || ""; } catch (e) {}
   if (keyId) {
     var key = await figma.getNodeByIdAsync(keyId);
     var kb = null;
@@ -1024,7 +1061,7 @@ async function selectTokenUsage(variableId) {
 
 async function selectUsageOnOtherPage(variable) {
   var homeId = "";
-  try { homeId = variable.getPluginData("keyPageId") || ""; } catch (e) {}
+  try { homeId = pdGet(variable, "keyPageId") || ""; } catch (e) {}
   var pages = [];
   for (var p = 0; p < figma.root.children.length; p++) {
     var pg = figma.root.children[p];
@@ -1100,9 +1137,9 @@ async function handleRelocateKey(variableId) {
   if (!binding) { notify(L("selectFirst")); return done(false); }
 
   applyBinding(binding, variable);
-  try { variable.setPluginData("keyNodeId", node.id); } catch (e) {}
-  try { variable.setPluginData("keyPageId", figma.currentPage.id); } catch (e) {}
-  try { variable.setPluginData("idAssigned", "1"); } catch (e) {}
+  try { pdSet(variable, "keyNodeId", node.id); } catch (e) {}
+  try { pdSet(variable, "keyPageId", figma.currentPage.id); } catch (e) {}
+  try { pdSet(variable, "idAssigned", "1"); } catch (e) {}
 
   // Rename to the new key's group, dropping any ⚠️ flag (leaf stays the ID).
   var id = stripWarn(splitName(variable.name).leaf);
@@ -1147,9 +1184,9 @@ async function handleCreateForBroken(values, nodeId) {
   }
 
   applyBinding(binding, variable);
-  try { variable.setPluginData("idAssigned", "1"); } catch (e) {}
-  try { variable.setPluginData("keyNodeId", node.id); } catch (e) {}
-  try { variable.setPluginData("keyPageId", figma.currentPage.id); } catch (e) {}
+  try { pdSet(variable, "idAssigned", "1"); } catch (e) {}
+  try { pdSet(variable, "keyNodeId", node.id); } catch (e) {}
+  try { pdSet(variable, "keyPageId", figma.currentPage.id); } catch (e) {}
   await addRecentId(variable.id);
   notify(L("created"));
   done(true, variable.id);
@@ -1381,10 +1418,10 @@ function topLevelAncestor(node) {
 }
 
 function readRegistry() {
-  try { return JSON.parse(figma.root.getPluginData(PD_TABLES) || "{}") || {}; }
+  try { return JSON.parse(pdGet(figma.root, PD_TABLES) || "{}") || {}; }
   catch (e) { return {}; }
 }
-function writeRegistry(reg) { figma.root.setPluginData(PD_TABLES, JSON.stringify(reg)); }
+function writeRegistry(reg) { pdSet(figma.root, PD_TABLES, JSON.stringify(reg)); }
 
 function tableIdForSource(reg, sourceId) {
   for (var id in reg) if (reg[id] && reg[id].s === sourceId) return id;
@@ -1443,8 +1480,8 @@ var tplCache = null; // { table, row, status, at }
 // loading all pages is expensive).
 async function getTemplates(searchFile) {
   if (!searchFile && tplCache && Date.now() - tplCache.at < TPL_CACHE_MS) return tplCache;
-  var tId = figma.root.getPluginData(PD_TPL_TABLE);
-  var rId = figma.root.getPluginData(PD_TPL_ROW);
+  var tId = pdGet(figma.root, PD_TPL_TABLE);
+  var rId = pdGet(figma.root, PD_TPL_ROW);
   var table = tId ? await figma.getNodeByIdAsync(tId) : null;
   var row = rId ? await figma.getNodeByIdAsync(rId) : null;
   if (!validTableTpl(table)) table = null;
@@ -1460,8 +1497,8 @@ async function getTemplates(searchFile) {
     if (!table) { var t2 = findComponentNamed(figma.root, TPL_TABLE_NAME); if (validTableTpl(t2)) table = t2; }
     if (!row) { var r2 = findComponentNamed(figma.root, TPL_ROW_NAME); if (validRowTpl(r2)) row = r2; }
   }
-  if (table) figma.root.setPluginData(PD_TPL_TABLE, table.id);
-  if (row) figma.root.setPluginData(PD_TPL_ROW, row.id);
+  if (table) pdSet(figma.root, PD_TPL_TABLE, table.id);
+  if (row) pdSet(figma.root, PD_TPL_ROW, row.id);
   var status = table && row ? "ok" : (hadStored ? "missing" : "none");
   tplCache = { table: table, row: row, status: status, at: Date.now() };
   return tplCache;
@@ -1505,12 +1542,30 @@ function makeText(chars, font, size, lineHeightPct, color, align) {
   return t;
 }
 
+// Template text font: Pretendard, which has Hangul glyphs. A font without them
+// (Inter) makes Figma fall back per glyph, and values that arrive through the
+// variable binding / column mode can render without the fallback until the
+// layer is touched — Korean shows only its Latin letters. Inter when
+// Pretendard isn't installed.
+async function loadTemplateFonts() {
+  var families = ["Pretendard", "Inter"];
+  for (var i = 0; i < families.length; i++) {
+    var bold = { family: families[i], style: "Bold" };
+    var regular = { family: families[i], style: "Regular" };
+    try {
+      await figma.loadFontAsync(bold);
+      await figma.loadFontAsync(regular);
+      return { bold: bold, regular: regular };
+    } catch (e) {}
+  }
+  throw new Error("No template font available (Pretendard, Inter)");
+}
+
 // The two templates, matching the reference design (Rider-App › Utility).
 async function buildTemplates(anchor) {
-  var bold = { family: "Inter", style: "Bold" };
-  var regular = { family: "Inter", style: "Regular" };
-  await figma.loadFontAsync(bold);
-  await figma.loadFontAsync(regular);
+  var fonts = await loadTemplateFonts();
+  var bold = fonts.bold;
+  var regular = fonts.regular;
 
   // i18n-row: one column per language, text bound per instance.
   var row = figma.createComponent();
@@ -1618,9 +1673,9 @@ async function buildTemplates(anchor) {
   table.description = "Template for translation tables. Managed by the i18n plugin: columns follow the modes of the \"language\" collection.";
   row.description = "One row of an i18n-table. Managed by the i18n plugin.";
 
-  figma.root.setPluginData(PD_TPL_TABLE, table.id);
-  figma.root.setPluginData(PD_TPL_ROW, row.id);
-  figma.root.setPluginData(PD_TPL_SIG, "");
+  pdSet(figma.root, PD_TPL_TABLE, table.id);
+  pdSet(figma.root, PD_TPL_ROW, row.id);
+  pdSet(figma.root, PD_TPL_SIG, "");
   tplCache = { table: table, row: row, status: "ok", at: Date.now() };
   return tplCache;
 }
@@ -1699,7 +1754,7 @@ async function syncTemplateColumns(tpls, ctx) {
   var sig = JSON.stringify({ w: TABLE_WIDTH, m: modes.map(function(m) { return [m.modeId, m.name]; }) });
   var header = tableParts(tpls.table).header;
   var headCols = langCols(header), rowCols = langCols(tpls.row);
-  if (figma.root.getPluginData(PD_TPL_SIG) === sig &&
+  if (pdGet(figma.root, PD_TPL_SIG) === sig &&
       headCols.length === modes.length && rowCols.length === modes.length) {
     if (!tpls.propKey) tpls.propKey = await ensureRowProperty(tpls.row);
     return false;
@@ -1718,7 +1773,7 @@ async function syncTemplateColumns(tpls, ctx) {
   }
   // A cloned column's text loses its property reference — re-attach it.
   tpls.propKey = await ensureRowProperty(tpls.row);
-  figma.root.setPluginData(PD_TPL_SIG, sig);
+  pdSet(figma.root, PD_TPL_SIG, sig);
   return true;
 }
 
@@ -1820,7 +1875,7 @@ async function syncTable(inst, ctx, tpls, force) {
     v: TABLE_RENDER_VERSION, t: tpls.table.id, r: tpls.row.id,
     m: tableModes(ctx).map(function(m) { return m.modeId; }), vars: varIds,
   }));
-  if (!force && inst.getPluginData(PD_TABLE_SIG) === sig) return { changed: false };
+  if (!force && pdGet(inst, PD_TABLE_SIG) === sig) return { changed: false };
 
   var slot = tableParts(inst).slot;
   if (!slot) throw new Error(L("tplBroken"));
@@ -1879,7 +1934,7 @@ async function syncTable(inst, ctx, tpls, force) {
     for (var left in byVar) byVar[left].remove();
   }
 
-  inst.setPluginData(PD_TABLE_SIG, sig);
+  pdSet(inst, PD_TABLE_SIG, sig);
   return { changed: true, rows: varIds.length };
 }
 
@@ -2042,8 +2097,8 @@ async function handleRestoreTemplates() {
       var anchor = figma.currentPage.selection[0] || null;
       if (keepTable || keepRow) {
         // One survived: rebuild the pair so their structures match.
-        figma.root.setPluginData(PD_TPL_TABLE, "");
-        figma.root.setPluginData(PD_TPL_ROW, "");
+        pdSet(figma.root, PD_TPL_TABLE, "");
+        pdSet(figma.root, PD_TPL_ROW, "");
       }
       tpls = await buildTemplates(anchor);
     }
@@ -2111,6 +2166,56 @@ figma.on("currentpagechange", function() {
 // Self-scheduling rather than setInterval, so a slow pass (huge tables, 1000s
 // of variables) never overlaps the next one, and the gap grows with the cost:
 // at least 2s, or 5x the last pass, capped at 30s.
+// One-time copy of the legacy private plugin data into the shared slot (see
+// pdGet/pdSet). Nothing is deleted. Variables: each key is copied only when the
+// shared slot is still empty. Table registry: entries are merged, so tables a
+// tool registered in the shared slot before this ran are kept too.
+var PD_MIGRATED = "sharedMigrated"; // root, shared slot only: "1" once copied
+async function migrateToShared() {
+  if (figma.root.getSharedPluginData(PD_NS, PD_MIGRATED) === "1") return;
+  var ROOT_KEYS = [PD_TPL_TABLE, PD_TPL_ROW, PD_TPL_SIG];
+  for (var rk = 0; rk < ROOT_KEYS.length; rk++) {
+    var legacy = figma.root.getPluginData(ROOT_KEYS[rk]);
+    if (legacy && !figma.root.getSharedPluginData(PD_NS, ROOT_KEYS[rk])) {
+      figma.root.setSharedPluginData(PD_NS, ROOT_KEYS[rk], legacy);
+    }
+  }
+
+  var privReg = {}, sharedReg = {};
+  try { privReg = JSON.parse(figma.root.getPluginData(PD_TABLES) || "{}") || {}; } catch (e) { privReg = {}; }
+  try { sharedReg = JSON.parse(figma.root.getSharedPluginData(PD_NS, PD_TABLES) || "{}") || {}; } catch (e) { sharedReg = {}; }
+  var tables = 0;
+  for (var tid in privReg) {
+    if (!sharedReg[tid]) { sharedReg[tid] = privReg[tid]; tables++; }
+  }
+  pdSet(figma.root, PD_TABLES, JSON.stringify(sharedReg));
+
+  var vars = 0;
+  var ctx = await getContext();
+  if (ctx.collection) {
+    var VAR_KEYS = ["idAssigned", "keyNodeId", "keyPageId"];
+    for (var vi = 0; vi < ctx.stringVars.length; vi++) {
+      var v = ctx.stringVars[vi];
+      var copied = false;
+      for (var ki = 0; ki < VAR_KEYS.length; ki++) {
+        var val = "";
+        try { val = v.getPluginData(VAR_KEYS[ki]); } catch (e) { val = ""; }
+        if (val && !v.getSharedPluginData(PD_NS, VAR_KEYS[ki])) {
+          v.setSharedPluginData(PD_NS, VAR_KEYS[ki], val);
+          copied = true;
+        }
+      }
+      if (copied) vars++;
+    }
+  }
+
+  figma.root.setSharedPluginData(PD_NS, PD_MIGRATED, "1");
+  if (vars || tables) notify(L("pdMigrated")({ vars: vars, tables: tables }));
+}
+withTableLock(migrateToShared).catch(function(e) {
+  notify(L("errorPrefix")(e && e.message ? e.message : String(e)));
+});
+
 var POLL_MIN_MS = 2000, POLL_MAX_MS = 30000;
 function schedulePoll(delay) {
   setTimeout(async function() {

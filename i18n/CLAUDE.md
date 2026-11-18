@@ -51,7 +51,7 @@
 
 - 진입점: `handleCreateTable`, `handleUpdateTable`, `handleRestoreTemplates` (UI 메시지 `table-create` / `table-update` / `table-restore`),
   2초 폴링 `syncCurrentPageTables`, 선택 정보 `tableInfoFor` → state `table-source` / `table-table`.
-- 저장(plugin data, `figma.root`): 템플릿 id `i18nTplTable` / `i18nTplRow`, 템플릿 열 서명 `i18nTplSig`,
+- 저장(shared plugin data `cg_i18n`, `figma.root` — `pdGet`/`pdSet`, [docs/data-contract.md](docs/data-contract.md)): 템플릿 id `i18nTplTable` / `i18nTplRow`, 템플릿 열 서명 `i18nTplSig`,
   테이블 레지스트리 `i18nTables` = `{ 테이블 instance id: { p: 페이지 id, s: 원본 레이어 id } }`. 테이블 instance에는 `i18nSig`.
 - 행은 `i18n-slot` > `i18n-rows` 프레임 안에 있고, row 템플릿의 TEXT 속성 `value`(모든 열 텍스트가 참조)에 변수를 연결한다.
   행 식별도 이 속성의 연결로 한다. 템플릿 구조는 이름으로 찾는다: 열 = `language-N` 프레임, 슬롯 = SLOT 노드.
@@ -67,6 +67,13 @@
   `figma.loadAllPagesAsync()`는 템플릿을 처음 찾을 때(사용자 동작)만 쓴다.
 - 동시 실행 방지: 사용자 동작은 `withTableLock`, 폴링은 잠금 중이면 건너뛴다.
 - 구조를 바꾸면 `TABLE_RENDER_VERSION`을 올려 기존 테이블이 한 번 다시 만들어지게 한다. 상세: [docs/architecture.md](docs/architecture.md).
+
+## plugin data — 외부 도구와 같은 칸
+
+- 모든 plugin data는 `pdGet`/`pdSet`으로만 읽고 쓴다. `getPluginData`/`setPluginData`를 직접 부르지 말 것 —
+  외부 도구(Claude `use_figma` 등)는 private 칸을 못 읽어서, 같은 결과를 만들 수 없게 된다.
+- 저장 형식과 외부 도구가 토큰·테이블을 만드는 절차는 [docs/data-contract.md](docs/data-contract.md). 키나 형식을 바꾸면 이 문서도 함께 고친다.
+- `migrateToShared`: 예전 private 데이터를 shared로 한 번 복사(삭제 없음, 레지스트리는 병합).
 
 ## QuickJS 제약 (code.js만)
 

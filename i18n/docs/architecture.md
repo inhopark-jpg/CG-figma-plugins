@@ -18,8 +18,10 @@
 
 - 각 변수는 소문자·숫자 6자 ID(`genId`)를 받아 이름의 리프로 저장한다.
   plugin data `idAssigned`로 마이그레이션 완료를 표시해, 정리를 다시 실행해도 ID를 재생성하지 않는다.
+  `idAssigned`가 없어도 이름 끝이 이미 겹치지 않는 6자 ID(`ID_RE`)면 그 ID를 유지한다 — 플러그인 밖에서 만든 토큰의 번역 키가 바뀌지 않게.
 - plugin data `keyNodeId` + `keyPageId`가 변수를 그 변수를 "소유"하는 텍스트 레이어(키 레이어)에 고정한다.
   정리는 현재 페이지만 검사하므로 페이지별로 저장한다.
+- plugin data는 모두 shared(`cg_i18n`)에 있다 — 형식은 [data-contract.md](data-contract.md).
 - `WARN`(`⚠️`): 키 레이어를 잃은 변수의 리프 앞에 붙는 표시.
 - `MISSING`(`--`): 미번역 모드 값을 나타내는 표시값.
 
@@ -27,7 +29,8 @@
 
 `handleCleanup()` (code.js)이 현재 페이지를 검사해 세 범주를 돌려주고, `ui.html`의 `renderReportView`가 한 화면에 보여 준다.
 
-1. 키 레이어가 없는 변수 — 기록된 key 레이어가 이 페이지에 없으면 표시. 다른 사용처를 key로 자동 채택하지 않는다(사용자 결정)
+1. 키 레이어가 없는 변수 — 기록된 key 레이어가 이 페이지에 없거나, key 레이어 기록 자체가 없는데 이 페이지에서 쓰이면 표시.
+   다른 사용처를 key로 자동 채택하지 않는다(사용자 결정)
 2. 변수 연결이 끊긴 텍스트 레이어
 3. 미번역 모드 값이 있는 변수
 
@@ -73,6 +76,8 @@
 - **템플릿**: `getTemplates(searchFile)` — 저장된 id → 현재 페이지에서 이름 검색 → (사용자 동작일 때만) 전체 페이지 이름 검색.
   상태는 `ok` / `missing`(저장된 적 있는데 삭제됨) / `none`(처음). 10초 캐시. 없으면 `buildTemplates`가 참조 디자인
   (Rider-App › Utility의 i18n-table/i18n-row)과 같은 스타일로 현재 페이지에 만든다.
+  글꼴은 `loadTemplateFonts` — Pretendard, 없으면 Inter. 한글 글리프가 없는 글꼴이면 변수·모드로 들어온 값이
+  대체 글꼴 없이 그려져 한글이 빠져 보이는 피그마 문제가 있어서다(레이어를 건드리면 정상으로 돌아옴).
 - **열**: `syncTemplateColumns`가 두 템플릿의 `language-N` 열 수를 모드 수에 맞춘다(마지막 열 복제, 왼쪽 테두리 0).
   모드가 많아도 `TABLE_MAX_COLUMNS`(3)개까지만 — `tableModes(ctx)` = 컬렉션 순서의 앞 3개 모드.
   너비는 `TABLE_WIDTH`(1500) 고정 — 각 열을 `columnWidth(i, n)`으로 균등 분할(남는 px는 앞 열). 서명(`i18nTplSig`)에 너비가 들어 있다.
